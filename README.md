@@ -85,9 +85,9 @@ CSV kaynağı MCP argümanında `{"type":"csv","content":"..."}`; XLSX `{"type":
 
 ## Vercel ve GitHub dağıtımı
 
-GitHub Actions `.github/workflows/quality.yml` her push ve PR'da strict typecheck, lint, sentetik unit/integration ve MCP protocol testleri, production dependency audit ve production build çalıştırır. Üretime yalnız CI başarılı `main` push'ları gidebilsin diye GitHub `main` korumasında `Reconcile MCP CI / quality` kontrolü required olmalıdır. Vercel Git entegrasyonu bu korumalı `main` dalından üretim deploy'u yapar; PR'lar preview build alabilir.
+GitHub Actions `.github/workflows/quality.yml` her push ve PR'da strict typecheck, lint, sentetik unit/integration ve MCP protocol testleri, production dependency audit ve production build çalıştırır. GitHub'da etkin `main-ci-gate` ruleset'i `main` güncellemelerini PR'larla sınırlar; `Reconcile MCP CI / quality` kontrolü güncel `main` üzerine başarılı olmalı ve ruleset bypass aktörü tanımlı değildir. Tek bakımcı akışını durdurmamak için insan onay sayısı sıfırdır; CI kontrolü zorunludur.
 
-Vercel proje ortamına yalnız gerekli hostları `RECONCILE_ALLOWED_HOSTS` ve izinli DB portlarını `RECONCILE_ALLOWED_POSTGRES_PORTS` olarak girin; bağlantı gizli anahtarlarını repository'e commit etmeyin. Boş allow-list ağ kaynaklarını reddeder. Uygulama analytics/telemetry kullanmaz. Vercel dışarıya HTTP Function `/api/mcp` ve statik arayüz dağıtır; veritabanı/storage kurulumu yoktur.
+Vercel production projesi henüz oluşturulmadı; public HTTPS endpoint/production URL henüz yok. Dağıtım için bu repository'yi `main` production branch'i ile Vercel Hobby projesine bağlayın; install `pnpm install --frozen-lockfile`, build `pnpm build`, output `dist` olarak ayarlayın. Proje oluşturma izni olan Vercel ekip üyeliği gerekir. Bağlandıktan sonra korumalı `main`'e yalnız başarılı CI ardından merge edilmesi production dağıtımını tetikler; PR'lar preview alabilir. Proje ortamına yalnız gerekli hostları `RECONCILE_ALLOWED_HOSTS` ve izinli DB portlarını `RECONCILE_ALLOWED_POSTGRES_PORTS` olarak girin; bağlantı gizli anahtarlarını repository'ye commit etmeyin. Boş allow-list ağ kaynaklarını reddeder. Uygulama analytics/telemetry kullanmaz; veritabanı/storage kurulumu yoktur.
 
 ## Güvenlik ve gizlilik
 
