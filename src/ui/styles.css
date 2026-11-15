@@ -1,0 +1,244 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+  background: #000;
+  color: #fff;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+  background: #000;
+}
+
+body {
+  margin: 0;
+  color: #fff;
+}
+
+.rt-Theme,
+.app-shell {
+  min-height: 100vh;
+  background: #000 !important;
+  color: #fff !important;
+}
+
+.rt-Theme {
+  --color-background: #000;
+  --gray-1: #000;
+  --gray-12: #fff;
+}
+
+.rt-Theme :where(*) {
+  color: #fff;
+}
+
+.rt-Card,
+.rt-SelectTrigger,
+.rt-SelectContent,
+.rt-SelectItem,
+.rt-TableRoot {
+  background-color: #000 !important;
+  color: #fff !important;
+}
+
+.rt-Card {
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  box-shadow: none;
+}
+
+.rt-SelectTrigger,
+.rt-SelectContent {
+  border-color: rgba(255, 255, 255, 0.45) !important;
+}
+
+.rt-SelectItem[data-highlighted] {
+  background: #fff !important;
+  color: #000 !important;
+}
+
+.rt-Button {
+  color: #fff !important;
+}
+
+.wordmark {
+  letter-spacing: -0.04em;
+}
+
+.drop-card {
+  min-height: 190px;
+}
+
+.side-label,
+.drop-secondary,
+.retention-note {
+  color: rgba(255, 255, 255, 0.65) !important;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.drop-zone {
+  display: flex;
+  min-height: 126px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 18px;
+  border: 1px dashed rgba(255, 255, 255, 0.62);
+  border-radius: 12px;
+  background: #000;
+  cursor: pointer;
+  text-align: center;
+  transition: border-color 140ms ease, box-shadow 140ms ease, background-color 140ms ease;
+}
+
+.drop-zone:hover,
+.drop-zone:focus-within,
+.drop-zone.is-dragging {
+  border-color: #fff;
+  background: #090909;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.45);
+}
+
+.drop-zone.has-error {
+  border-style: solid;
+}
+
+.drop-primary {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.drop-secondary {
+  font-size: 10px;
+}
+
+.match-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+.match-trigger {
+  min-width: 170px;
+}
+
+.run-row {
+  display: flex;
+  justify-content: center;
+  padding: 2px 0;
+}
+
+.run-button.rt-Button {
+  min-width: 180px;
+  min-height: 60px;
+  padding: 0 32px;
+  border: 5px solid transparent !important;
+  border-radius: 999px !important;
+  background:
+    linear-gradient(#000, #000) padding-box,
+    linear-gradient(105deg, #ff3cac, #784ba0, #2b86c5, #44d7b6, #ffe45e, #ff3cac) border-box !important;
+  color: #fff !important;
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  transition: box-shadow 180ms ease, transform 180ms ease;
+}
+
+.run-button.rt-Button:hover:not(:disabled),
+.run-button.rt-Button:focus-visible:not(:disabled) {
+  box-shadow: 0 0 10px rgba(255, 60, 172, 0.65), 0 0 26px rgba(43, 134, 197, 0.55), 0 0 42px rgba(68, 215, 182, 0.32);
+  transform: translateY(-1px);
+}
+
+.run-button.rt-Button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.mcp-button.rt-Button {
+  min-width: 76px;
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  background: #000;
+  letter-spacing: 0.08em;
+}
+
+.results {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.summary-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.24);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.24);
+  padding: 12px 0;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+.report-link {
+  width: fit-content;
+  color: #fff;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.report-link:hover {
+  text-decoration-thickness: 2px;
+}
+
+.table-wrap {
+  max-height: 420px;
+  overflow: auto;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 8px;
+}
+
+.rt-TableRoot :where(th, td) {
+  border-color: rgba(255, 255, 255, 0.18) !important;
+}
+
+.status-line {
+  margin: 0;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.retention-note {
+  align-self: center;
+  margin-top: 12px;
+  font-size: 9px;
+}
+
+:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
