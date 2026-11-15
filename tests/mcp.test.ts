@@ -44,8 +44,11 @@ describe('MCP Streamable HTTP protocol', () => {
       },
     });
     expect(result.isError).not.toBe(true);
-    const structured = result.structuredContent as { summary: { valueMismatches: number }; mismatches: unknown[] };
+    const structured = result.structuredContent as { summary: { valueMismatches: number; matchedKeys: number; mismatchedRows: number }; comparisonPreview: Array<{ status: string }>; mismatches: unknown[] };
     expect(structured.summary.valueMismatches).toBe(1);
+    expect(structured.summary.matchedKeys).toBe(1);
+    expect(structured.summary.mismatchedRows).toBe(1);
+    expect(structured.comparisonPreview[0]?.status).toBe('mismatch');
     expect(structured.mismatches).toHaveLength(1);
     const content = result.content as Array<{ type: string; text?: string }>;
     expect(content.some((entry) => entry.type === 'text' && entry.text?.includes('Mutabakat'))).toBe(true);

@@ -1,48 +1,45 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { ChangeEvent, DragEvent, Dispatch, SetStateAction } from 'react';
-import { Button, Card, Heading, Table, Text } from '@radix-ui/themes';
-import type { FieldPair, ReconciliationResult, Scalar } from '../core/types.js';
+import type { Dispatch, SetStateAction } from 'react';
+import { Badge, Button, Card, Heading, Switch, Text, Theme } from '@radix-ui/themes';
+import { chooseKeyPair, commonFieldPairs, emptyUpload, fileFormat, formatBytes, FORM_OVERHEAD_RESERVE, MAX_COMBINED_BYTES, MAX_FILE_BYTES, type ResultResponse, type Side, type SourceUpload } from './dashboard-logic.js';
+import { ResultsPanel } from './ResultsPanel.js';
+import { SourceCard } from './SourceCard.js';
 
-const MAX_FILE_BYTES = 4 * 1024 * 1024;
-const MAX_COMBINED_BYTES = Math.floor(4.25 * 1024 * 1024);
-const FORM_OVERHEAD_RESERVE = 4096;
-const ACCEPTED_FILES = '.csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-
-type Side = 'left' | 'right';
-type Upload = { file: File | null; columns: string[]; busy: boolean; error: string; dragging: boolean };
 type Preview = { columns: string[]; rowCount: number };
-type ResultResponse = ReconciliationResult & { reportCsv: string };
-const emptyUpload = (): Upload => ({ file: null, columns: [], busy: false, error: '', dragging: false });
+type ApiError = { error?: string };
+type Appearance = 'light' | 'dark';
 
-function fileFormat(file: File): 'csv' | 'xlsx' | null {
-  const lower = file.name.toLowerCase();
-  if (lower.endsWith('.csv')) return 'csv';
-  if (lower.endsWith('.xlsx')) return 'xlsx';
-  return null;
-}
-
-function displayScalar(value: Scalar | undefined): string {
-  if (value === null || value === undefined) return '—';
-  return typeof value === 'string' ? value : String(value);
+function safeError(payload: unknown, fallback: string): string {
+  if (payload && typeof payload === 'object' && 'error' in payload && typeof payload.error === 'string') return payload.error;
+  return fallback;
 }
 
 function App() {
-  const [left, setLeft] = useState<Upload>(emptyUpload);
-  const [right, setRight] = useState<Upload>(emptyUpload);
+  const [appearance, setAppearance] = useState<Appearance>('light');
+  const [left, setLeft] = useState<SourceUpload>(emptyUpload);
+  const [right, setRight] = useState<SourceUpload>(emptyUpload);
   const [working, setWorking] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState<ResultResponse | null>(null);
   const [reportUrl, setReportUrl] = useState('');
+  const [ignoreCase, setIgnoreCase] = useState(false);
+  const [trimWhitespace, setTrimWhitespace] = useState(true);
+  const [onlyDifferences, setOnlyDifferences] = useState(false);
+  const [tab, setTab] = useState('comparison');
   const requestIds = useRef<Record<Side, number>>({ left: 0, right: 0 });
+  const runRequestId = useRef(0);
+  const runController = useRef<AbortController | null>(null);
 
-  const commonColumns = useMemo(
-    () => left.columns.filter((column) => right.columns.includes(column)),
-    [left.columns, right.columns],
-  );
-  const preferredKeys = new Set(['id', 'uuid', 'key', 'recordid', 'invoiceid', 'transactionid', 'accountid', 'customerid', 'reference', 'ref', 'code']);
-  const keyField = commonColumns.find((column) => preferredKeys.has(column.toLowerCase().replace(/[^a-z0-9]/g, ''))) ?? commonColumns[0] ?? '';
-  const setUpload = (side: Side): Dispatch<SetStateAction<Upload>> => side === 'left' ? setLeft : setRight;
+  const setUpload = (side: Side): Dispatch<SetStateAction<SourceUpload>> => side === 'left' ? setLeft : setRight;
+  const commonPairs = useMemo(() => commonFieldPairs(left.columns, right.columns), [left.columns, right.columns]);
+  const keyPair = useMemo(() => chooseKeyPair(commonPairs), [commonPairs]);
+  const fieldPairs = useMemo(() => commonPairs.filter((pair) => pair.left !== keyPair?.left || pair.right !== keyPair?.right), [commonPairs, keyPair]);
+  const requestBytes = left.file && right.file
+    ? left.file.size + right.file.size + new TextEncoder().encode(left.file.name).length + new TextEncoder().encode(right.file.name).length + FORM_OVERHEAD_RESERVE
+    : 0;
+  const overBudget = requestBytes > MAX_COMBINED_BYTES;
+  const ready = Boolean(left.file && right.file && keyPair && !left.busy && !right.busy && !working && !overBudget);
 
   useEffect(() => {
     if (!result) {
@@ -54,208 +51,212 @@ function App() {
     return () => URL.revokeObjectURL(url);
   }, [result]);
 
+  useEffect(() => {
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', appearance === 'dark' ? '#111827' : '#f5f7fa');
+  }, [appearance]);
+
+  const invalidateRun = (): void => {
+    runRequestId.current += 1;
+    runController.current?.abort();
+    runController.current = null;
+    setWorking(false);
+  };
+
   const inspectFile = async (side: Side, file: File): Promise<void> => {
     const update = setUpload(side);
     const requestId = ++requestIds.current[side];
-    const format = fileFormat(file);
+    invalidateRun();
     setError('');
     setResult(null);
+    const format = fileFormat(file.name);
     if (!format) {
-      update({ file: null, columns: [], busy: false, error: 'CSV / XLSX', dragging: false });
+      update({ ...emptyUpload(), error: 'Choose a CSV or XLSX file.' });
+      return;
+    }
+    if (file.size === 0) {
+      update({ ...emptyUpload(), error: 'The selected file is empty.' });
       return;
     }
     if (file.size > MAX_FILE_BYTES) {
-      update({ file: null, columns: [], busy: false, error: 'MAX 4 MB', dragging: false });
+      update({ ...emptyUpload(), error: 'File exceeds the 4 MB limit.' });
       return;
     }
-    update({ file, columns: [], busy: true, error: '', dragging: false });
+    update({ file, columns: [], rowCount: null, busy: true, error: '', dragging: false });
     const form = new FormData();
     form.append('mode', 'inspect');
     form.append('source', JSON.stringify({ type: 'file', format, name: file.name }));
     form.append('file', file, file.name);
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 16_000);
     try {
-      const response = await fetch('/api/reconcile', {
-        method: 'POST',
-        body: form,
-        signal: AbortSignal.timeout(16_000),
-      });
-      const payload = await response.json() as Preview & { error?: string };
-      if (!response.ok) throw new Error(payload.error || 'FILE ERROR');
+      const response = await fetch('/api/reconcile', { method: 'POST', body: form, signal: controller.signal });
+      const payload = await response.json() as Preview & ApiError;
+      if (!response.ok) throw new Error(safeError(payload, 'Could not read this file.'));
       if (requestIds.current[side] !== requestId) return;
-      update((current) => ({ ...current, columns: payload.columns, busy: false, error: '' }));
+      update((current) => ({ ...current, columns: payload.columns, rowCount: payload.rowCount, busy: false, error: '' }));
     } catch (cause) {
       if (requestIds.current[side] !== requestId) return;
-      const message = cause instanceof Error && cause.name === 'TimeoutError' ? 'TIMEOUT' : cause instanceof Error ? cause.message : 'FILE ERROR';
-      update((current) => ({ ...current, columns: [], busy: false, error: message }));
+      const message = controller.signal.aborted ? 'File inspection timed out. Try a smaller file.' : cause instanceof Error ? cause.message : 'Could not read this file.';
+      update((current) => ({ ...current, columns: [], rowCount: null, busy: false, error: message }));
+    } finally {
+      window.clearTimeout(timeout);
     }
   };
 
-  const onFileChange = (side: Side, event: ChangeEvent<HTMLInputElement>): void => {
-    const file = event.currentTarget.files?.[0];
-    event.currentTarget.value = '';
-    if (file) void inspectFile(side, file);
-  };
-
-  const onDrop = (side: Side, event: DragEvent<HTMLLabelElement>): void => {
-    event.preventDefault();
-    const file = event.dataTransfer.files[0];
-    setUpload(side)((current) => ({ ...current, dragging: false }));
-    if (file) void inspectFile(side, file);
+  const onSelectError = (side: Side, message: string): void => {
+    const update = setUpload(side);
+    requestIds.current[side] += 1;
+    update({ ...emptyUpload(), error: message });
+    invalidateRun();
+    setResult(null);
+    setError('');
   };
 
   const copyMcp = async (): Promise<void> => {
     try {
+      if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable');
       await navigator.clipboard.writeText(`${window.location.origin}/api/mcp`);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1800);
     } catch {
-      setError('CLIPBOARD UNAVAILABLE');
+      setError('Clipboard access is unavailable in this browser.');
     }
   };
 
   const run = async (): Promise<void> => {
-    if (!left.file || !right.file || !keyField) return;
-    const fileBytes = left.file.size + right.file.size;
-    const nameBytes = new TextEncoder().encode(left.file.name).length + new TextEncoder().encode(right.file.name).length;
-    if (fileBytes + nameBytes + FORM_OVERHEAD_RESERVE > MAX_COMBINED_BYTES) {
-      setError('MAX REQUEST 4.25 MB');
-      return;
-    }
+    if (!left.file || !right.file || !keyPair || overBudget) return;
+    const leftFormat = fileFormat(left.file.name);
+    const rightFormat = fileFormat(right.file.name);
+    if (!leftFormat || !rightFormat) return;
+    const requestId = ++runRequestId.current;
+    const controller = new AbortController();
+    runController.current = controller;
+    const timeout = window.setTimeout(() => controller.abort(), 16_000);
     setWorking(true);
     setError('');
     setResult(null);
-    const formatLeft = fileFormat(left.file);
-    const formatRight = fileFormat(right.file);
-    if (!formatLeft || !formatRight) {
-      setWorking(false);
-      setError('CSV / XLSX');
-      return;
-    }
     const form = new FormData();
     form.append('mode', 'compare');
-    form.append('left', JSON.stringify({ type: 'file', format: formatLeft, name: left.file.name }));
-    form.append('right', JSON.stringify({ type: 'file', format: formatRight, name: right.file.name }));
-    form.append('keyPairs', JSON.stringify([{ left: keyField, right: keyField }]));
-    const fieldPairs: FieldPair[] = commonColumns.filter((column) => column !== keyField).map((column) => ({ left: column, right: column }));
+    form.append('left', JSON.stringify({ type: 'file', format: leftFormat, name: left.file.name }));
+    form.append('right', JSON.stringify({ type: 'file', format: rightFormat, name: right.file.name }));
+    form.append('keyPairs', JSON.stringify([keyPair]));
     form.append('fieldPairs', JSON.stringify(fieldPairs));
-    form.append('trimWhitespace', 'true');
+    form.append('trimWhitespace', String(trimWhitespace));
     form.append('caseSensitiveKeys', 'true');
+    form.append('caseSensitiveValues', String(!ignoreCase));
     form.append('tolerance', '0');
     form.append('fileLeft', left.file, left.file.name);
     form.append('fileRight', right.file, right.file.name);
     try {
-      const response = await fetch('/api/reconcile', {
-        method: 'POST',
-        body: form,
-        signal: AbortSignal.timeout(16_000),
-      });
-      const payload = await response.json() as ResultResponse & { error?: string };
-      if (!response.ok) throw new Error(payload.error || 'RUN FAILED');
-      setResult(payload);
+      const response = await fetch('/api/reconcile', { method: 'POST', body: form, signal: controller.signal });
+      const payload = await response.json() as ResultResponse & ApiError;
+      if (!response.ok) throw new Error(safeError(payload, 'Reconciliation failed.'));
+      if (runRequestId.current !== requestId) return;
+      setResult(payload as ResultResponse);
+      setTab('comparison');
     } catch (cause) {
-      setError(cause instanceof Error && cause.name === 'TimeoutError' ? 'TIMEOUT · 15 SEC' : cause instanceof Error ? cause.message : 'RUN FAILED');
+      if (runRequestId.current !== requestId) return;
+      setError(controller.signal.aborted ? 'The request timed out after 15 seconds. No result was saved.' : cause instanceof Error ? cause.message : 'Reconciliation failed.');
     } finally {
-      setWorking(false);
+      window.clearTimeout(timeout);
+      if (runRequestId.current === requestId) {
+        setWorking(false);
+        runController.current = null;
+      }
     }
   };
 
-  const ready = Boolean(left.file && right.file && keyField && !left.busy && !right.busy && !working);
-  const totalMissing = result ? result.summary.missingOnLeft + result.summary.missingOnRight : 0;
-  const totalDuplicates = result ? result.summary.duplicateKeysOnLeft + result.summary.duplicateKeysOnRight : 0;
+  const updateDragging = (side: Side, dragging: boolean): void => {
+    setUpload(side)((current) => ({ ...current, dragging }));
+  };
 
   return (
-    <main className="app-shell min-h-screen px-4 py-8 sm:px-8 sm:py-12">
-      <div className="mx-auto flex w-full max-w-4xl flex-col gap-8">
-        <header className="flex items-center justify-between gap-4">
-          <Heading as="h1" size="5" className="wordmark">Reconcile MCP</Heading>
-          <Button type="button" className="mcp-button" variant="outline" onClick={() => void copyMcp()} aria-label="MCP bağlantı adresini kopyala">
-            {copied ? 'COPIED' : 'CONNECT MCP'}
-          </Button>
-        </header>
-
-        <section className="grid gap-4 sm:grid-cols-2" aria-label="Kaynak dosyaları">
-          {([['left', 'A', left], ['right', 'B', right]] as const).map(([side, label, source]) => (
-            <Card key={side} size="4" className="drop-card">
-              <Text as="div" size="1" className="side-label">{label}</Text>
-              <label
-                htmlFor={`source-${side}`}
-                className={`drop-zone ${source.dragging ? 'is-dragging' : ''} ${source.error ? 'has-error' : ''}`}
-                onDragOver={(event) => { event.preventDefault(); setUpload(side)((current) => ({ ...current, dragging: true })); }}
-                onDragLeave={() => setUpload(side)((current) => ({ ...current, dragging: false }))}
-                onDrop={(event) => onDrop(side, event)}
-              >
-                <input
-                  id={`source-${side}`}
-                  className="sr-only"
-                  type="file"
-                  accept={ACCEPTED_FILES}
-                  aria-label={`Kaynak ${label} CSV veya XLSX dosyası`}
-                  onChange={(event) => onFileChange(side, event)}
-                />
-                <span className="drop-primary">{source.busy ? 'READING' : source.file ? source.file.name : `DROP ${label}`}</span>
-                <span className="drop-secondary">{source.error || (source.file ? `${(source.file.size / 1024).toFixed(0)} KB` : 'CSV / XLSX · MAX 4 MB')}</span>
-              </label>
-            </Card>
-          ))}
-        </section>
-
-        {keyField && (
-          <section className="match-row" aria-label="Eşleşme alanı">
-            <Text size="1" className="side-label">KEY</Text>
-            <Text size="2">{keyField}</Text>
-          </section>
-        )}
-        {left.columns.length > 0 && right.columns.length > 0 && commonColumns.length === 0 && <Text as="p" role="status" className="status-line">NO COMMON KEY</Text>}
-
-        <div className="run-row">
-          <Button type="button" className="run-button" onClick={() => void run()} disabled={!ready} aria-busy={working}>
-            RUN
-          </Button>
-        </div>
-
-        {error && <Text as="p" role="alert" className="status-line">{error}</Text>}
-
-        {result && (
-          <section className="results" aria-live="polite">
-            <div className="summary-line">
-              <span>{result.summary.leftRows} / {result.summary.rightRows}</span>
-              <span>MISSING {totalMissing}</span>
-              <span>DUPLICATE {totalDuplicates}</span>
-              <span>VALUE {result.summary.valueMismatches}</span>
-              <span>SCHEMA {result.summary.schemaIssues}</span>
+    <Theme appearance={appearance} accentColor="blue" grayColor="gray" radius="medium" scaling="100%">
+      <div className="app-shell">
+        <div className="dashboard-container">
+          <header className="topbar">
+            <div className="brand-block">
+              <Heading as="h1" size="5" className="wordmark">Reconcile<span> MCP</span></Heading>
+              <Text as="p" size="1" color="gray" className="brand-caption">Data reconciliation workspace</Text>
             </div>
-            {reportUrl && <a className="report-link" href={reportUrl} download="reconcile-report.csv">CSV</a>}
-            {result.mismatches.length > 20 && <Text as="p" size="1" className="status-line">SHOWING 20 OF {result.mismatches.length}</Text>}
-            {result.mismatches.length > 0 && (
-              <div className="table-wrap">
-                <Table.Root size="1" variant="surface">
-                  <Table.Header>
-                    <Table.Row>
-                      <Table.ColumnHeaderCell>KEY</Table.ColumnHeaderCell>
-                      <Table.ColumnHeaderCell>FIELD</Table.ColumnHeaderCell>
-                      <Table.ColumnHeaderCell>A</Table.ColumnHeaderCell>
-                      <Table.ColumnHeaderCell>B</Table.ColumnHeaderCell>
-                    </Table.Row>
-                  </Table.Header>
-                  <Table.Body>
-                    {result.mismatches.slice(0, 20).map((item, index) => (
-                      <Table.Row key={`${index}-${item.leftField}`}>
-                        <Table.Cell>{JSON.stringify(item.key)}</Table.Cell>
-                        <Table.Cell>{item.leftField}</Table.Cell>
-                        <Table.Cell>{displayScalar(item.leftValue)}</Table.Cell>
-                        <Table.Cell>{displayScalar(item.rightValue)}</Table.Cell>
-                      </Table.Row>
-                    ))}
-                  </Table.Body>
-                </Table.Root>
+            <div className="topbar-actions">
+              <div className="theme-control">
+                <Text as="label" htmlFor="theme-toggle" size="1">Dark</Text>
+                <Switch id="theme-toggle" checked={appearance === 'dark'} onCheckedChange={(checked) => setAppearance(checked ? 'dark' : 'light')} aria-label="Toggle dark theme" />
               </div>
-            )}
-          </section>
-        )}
+              <Button type="button" variant="outline" onClick={() => void copyMcp()} aria-label="Copy MCP endpoint URL">
+                {copied ? 'Copied' : 'Connect MCP'}
+              </Button>
+            </div>
+          </header>
 
-        <Text size="1" className="retention-note">NO STORAGE</Text>
+          <main>
+            <section className="source-grid" aria-label="Source files">
+              <SourceCard side="left" upload={left} onInspect={inspectFile} onDraggingChange={updateDragging} onSelectError={onSelectError} />
+              <SourceCard side="right" upload={right} onInspect={inspectFile} onDraggingChange={updateDragging} onSelectError={onSelectError} />
+            </section>
+
+            {keyPair && left.columns.length > 0 && right.columns.length > 0 && (
+              <section className="mapping-strip" aria-label="Automatic field mapping">
+                <Text size="1" color="gray">MATCH KEY</Text>
+                <Badge color="blue" variant="soft">{keyPair.left}{keyPair.left === keyPair.right ? '' : ` → ${keyPair.right}`}</Badge>
+                <Text size="1" color="gray">{fieldPairs.length} comparable fields</Text>
+              </section>
+            )}
+            {left.columns.length > 0 && right.columns.length > 0 && !keyPair && (
+              <Text as="p" role="status" className="inline-message">No common column names. RUN is unavailable.</Text>
+            )}
+
+            <section className="dashboard-workspace" aria-label="Reconciliation workspace">
+              <ResultsPanel result={result} tab={tab} onTabChange={setTab} onlyDifferences={onlyDifferences} />
+              <aside className="action-column" aria-label="Run and settings">
+                <Card className="action-card" size="3">
+                  <Text as="div" size="3" weight="bold">Run</Text>
+                  <Text as="p" size="1" color="gray" className="action-copy">Compare the selected sources using the automatic key and mapped fields.</Text>
+                  <Button type="button" className="run-button" onClick={() => void run()} disabled={!ready} aria-busy={working}>
+                    {working ? 'Comparing…' : 'Run reconciliation'}
+                  </Button>
+                  {left.file && right.file && <Text as="div" size="1" color={overBudget ? 'red' : 'gray'} className="budget-note">Request budget: {formatBytes(requestBytes)} / 4.25 MB</Text>}
+                  {overBudget && <Text as="p" role="alert" size="1" color="red">Combined files exceed the request limit.</Text>}
+                  {error && <Text as="p" role="alert" className="error-message">{error}</Text>}
+                  {result && reportUrl && <a className="download-button" href={reportUrl} download="reconcile-report.csv">Download CSV report</a>}
+                  <div className="endpoint-info">
+                    <Text as="div" size="1" weight="medium">MCP endpoint</Text>
+                    <code>{window.location.origin}/api/mcp</code>
+                    <Text as="div" size="1" color="gray" aria-live="polite">{copied ? 'Endpoint copied to clipboard.' : 'Connect from an MCP-compatible client.'}</Text>
+                  </div>
+                </Card>
+
+                <Card className="settings-card" size="3">
+                  <Text as="div" size="3" weight="bold">Options</Text>
+                  <label className="setting-row" htmlFor="ignore-case">
+                    <span><Text as="div" size="2" weight="medium">Ignore case (text)</Text><Text as="div" size="1" color="gray">Text values only</Text></span>
+                    <Switch id="ignore-case" checked={ignoreCase} onCheckedChange={setIgnoreCase} aria-label="Ignore case in text values" />
+                  </label>
+                  <label className="setting-row" htmlFor="trim-whitespace">
+                    <span><Text as="div" size="2" weight="medium">Trim whitespace</Text><Text as="div" size="1" color="gray">Leading and trailing</Text></span>
+                    <Switch id="trim-whitespace" checked={trimWhitespace} onCheckedChange={setTrimWhitespace} aria-label="Trim leading and trailing whitespace" />
+                  </label>
+                  <label className="setting-row" htmlFor="only-differences">
+                    <span><Text as="div" size="2" weight="medium">Show only differences</Text><Text as="div" size="1" color="gray">Filter comparison table</Text></span>
+                    <Switch id="only-differences" checked={onlyDifferences} onCheckedChange={setOnlyDifferences} aria-label="Show only differences in the comparison table" />
+                  </label>
+                </Card>
+
+                <Card className="privacy-card" size="2">
+                  <Text as="div" size="1" weight="bold">No app-level data storage</Text>
+                  <Text as="p" size="1" color="gray">Files and results are processed for the request only. Hosting-provider infrastructure logs are outside the app’s control.</Text>
+                </Card>
+              </aside>
+            </section>
+          </main>
+          <footer className="page-footer">
+            <Text size="1" color="gray">{MAX_FILE_BYTES / 1024 / 1024} MB per file · 10,000 rows per source · no persistent app storage</Text>
+            <Text size="1" color="gray">{MAX_COMBINED_BYTES / 1024 / 1024} MB request limit</Text>
+          </footer>
+        </div>
       </div>
-    </main>
+    </Theme>
   );
 }
 

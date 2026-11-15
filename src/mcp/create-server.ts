@@ -29,6 +29,8 @@ function compactResult(result: ReconciliationResult): Record<string, unknown> {
   return {
     summary: result.summary,
     schema: result.schema,
+    comparisonPreview: result.comparisonPreview,
+    previewTruncated: result.previewTruncated,
     missing: result.missing,
     duplicates: result.duplicates,
     mismatches: result.mismatches,

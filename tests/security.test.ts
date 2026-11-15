@@ -42,7 +42,7 @@ describe('source security boundaries', () => {
     const runtimeFiles = [
       'api/mcp.ts', 'api/reconcile.ts', 'src/server/mcp-handler.ts',
       'src/server/reconcile-handler.ts', 'src/sources/load.ts', 'src/sources/load-mcp.ts',
-      'src/mcp/create-server.ts', 'src/ui/App.tsx', 'src/ui/main.tsx', 'src/core/report.ts',
+      'src/mcp/create-server.ts', 'src/ui/App.tsx', 'src/ui/SourceCard.tsx', 'src/ui/ResultsPanel.tsx', 'src/ui/main.tsx', 'src/core/report.ts',
     ];
     for (const file of runtimeFiles) {
       const source = readFileSync(resolve(root, file), 'utf8');
@@ -55,6 +55,9 @@ describe('source security boundaries', () => {
     expect(html).not.toMatch(/analytics|tracking|telemetry/i);
     const app = readFileSync(resolve(root, 'src/ui/App.tsx'), 'utf8');
     expect(app.match(/<Button\b/g) ?? []).toHaveLength(2);
+    expect(readFileSync(resolve(root, 'src/ui/ResultsPanel.tsx'), 'utf8')).toMatch(/<Tabs\.Root/);
+    expect(app).toMatch(/<Switch\b/);
+    expect(readFileSync(resolve(root, 'src/ui/SourceCard.tsx'), 'utf8')).toMatch(/onDrop=/);
     const manifest = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8')) as { dependencies: Record<string, unknown> };
     expect(JSON.stringify(Object.keys(manifest.dependencies))).not.toMatch(/openai|anthropic|gemini|cohere/i);
   });

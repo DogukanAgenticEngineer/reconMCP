@@ -1,52 +1,53 @@
-# Reconcile MCP — Uygulama Planı
+# Reconcile MCP — Güncellenmiş Uygulama Planı
 
 ## Amaç ve mimari
 
-CSV/XLSX karşılaştırması için web çalışma alanı ve CSV/XLSX/PostgreSQL/REST kaynakları için aynı deterministik TypeScript motorunu kullanan MCP hizmeti. Vercel production yüzeyi statik Vite arayüzü, file-backed `/api/reconcile` işlemi ve resmi SDK Streamable HTTP `/api/mcp` fonksiyonudur; yerel çalışma için STDIO da vardır. Web UI'da yalnız iki dosya bırakma alanı bulunur; PostgreSQL ve REST, temel ekranı ağırlaştırmadan MCP arayüzünden kullanılabilir. Veri tabanı, kalıcı file/object storage, persistent cache, kullanıcı hesabı ve dış AI yoktur. İstek başına veri yalnız bellekte kullanılır; sağlayıcı log/retention uygulaması ayrıca sınırlandırılarak belgelenir.
+Mevcut Vite/React uygulamasını üretimdeki deterministik karşılaştırma motoruna ve resmi MCP sunucusuna bağlı, gerçek dosyalarla çalışan bir mutabakat dashboard'una dönüştür. Vercel'de statik arayüz, `/api/reconcile` serverless işlevi ve Streamable HTTP `/api/mcp` endpoint'i kalır; yerel STDIO desteği korunur. PostgreSQL ve REST bağlantıları web ekranını sade tutmak için MCP üzerinden kullanılabilir.
 
-## Ürün yaklaşımı
+## Ürün ve etkileşim
 
-- Kaynak A ve B için yalnız CSV/XLSX seçebilen iki sürükle-bırak/dropzone alanı göster. Anahtarı kullanıcıya seçtirtme: ortak başlıklarda `id`/`uuid`/`key`/`record_id`/`invoice_id`/`transaction_id` gibi kimlik başlıklarını öncele, yoksa ilk ortak başlığı deterministik seç; ortak başlık yoksa çalıştırmayı engelle. Diğer ortak başlıkları değer alanı olarak karşılaştır.
-- `RUN` düğmesi karşılaştırmayı başlatır; sonuç özeti ve uyuşmazlık tablosu gösterilir. CSV raporu eylem düğmesi değil, bağlantı/indirme anchor'ı olur.
-- `MCP` düğmesi çalışan sunucuya bağlanma URL'sini (`window.location.origin + '/api/mcp'`) panoya kopyalar. Kullanıcıya görünür eylem düğmeleri yalnız bunlar ve `RUN`'dır.
-- Uygulama kökten siyah, metinler beyaz; kontrast/erişilebilirlik korunur. `RUN` düğmesinde kalın renk kuşağı border ve yalnız hover/focus durumunda glow kullanılır; hareket azaltma tercihi glow geçişini bastırır.
-- Radix Themes'in mevcut `Button`, `Card`, `Table`, `Text`, `Heading` bileşenleri kullanılır; yeni component kütüphanesi veya gereksiz ikon yoktur. Görünür eylem düğmesi yalnız iki tanedir. Tailwind yalnız yaygın layout/styling için kullanılır; özel tasarım sistemi oluşturulmaz.
-- Tüm karşılaştırmalar deterministiktir. İstemciye yükleme sınırları, çalışma süresi ve gizlilik hakkında yalnız gerekli kısa microcopy gösterilir.
+- Kullanıcının son eklediği dashboard görseli tasarım referansıdır. Arayüzde üst başlık/bağlantı alanı, iki kaynak kartı, sonuç sekmeleri, özet metrikleri, karşılaştırma/farklar tablosu ve eylem alanı bulunur.
+- A ve B için erişilebilir sürükle-bırak veya dosya seçimi: yalnız CSV/XLSX; dosya adı, boyutu, satır sayısı ve sütunlar görünür. Dosya başına 4 MB, istek toplamı ekler dâhil 4,25 MB sınırı kullanıcıya kısa ve doğru biçimde gösterilir.
+- Ortak kimlik başlığı otomatik seçilir; `id`/`uuid`/`key`/`record_id`/`invoice_id`/`transaction_id` gibi adlar önce gelir, yoksa ilk ortak başlık deterministik seçilir. Kullanıcıya manuel anahtar girişi gösterilmez; ortak alan yoksa RUN devre dışı kalır.
+- Açık tema (varsayılan, ekli referansa yakın) ve koyu tema arasında erişilebilir bir geçiş ekle. Tema durumu yalnız uygulama belleğinde tutulur; `localStorage`, cookie veya kalıcı profil yoktur.
+- `Comparison`, `Differences`, `Summary` sekmeleri gerçek API sonucunu gösterir. Özet: eşleşen anahtarlar, eksik kayıtlar, yinelenen anahtarlar, değer farkları ve şema farkları. Tablo, eşleşen/farklı/yalnız A/yalnız B/yinelenen kayıt durumları için sunucudan dönen sınırlandırılmış gerçek karşılaştırma önizlemesini; ayrıntı sekmesi ise fark alanlarını ve A/B değerlerini gösterir. Demo/fake veri kullanılmaz; görünür satır sayısı ve rapor kapsamı ayrımı açıkça belirtilir.
+- Ayarlar işlevsel olmalı: metinde büyük/küçük harfi yok sayma; baş/son boşlukları kırpma; karşılaştırma tablosunda yalnız farkları gösterme. Varsa tolerans açıkça belirtilir; varsayılan mevcut deterministik motor davranışını bozmaz.
+- `RUN` geçersiz/yüklenmekte olan girdide devre dışıdır; bekleme, hata, boş sonuç ve başarılı sonuç durumları açıkça gösterilir. CSV raporu tam sonuç için indirme bağlantısı sunar. MCP düğmesi `/api/mcp` adresini panoya kopyalar; harici istemcide bağlı olduğu izlenimini vermez.
+- `@radix-ui/themes` mevcut bileşenleri kullan; yeni UI kütüphanesi, gereksiz ikon veya veri gönderen dış servis ekleme. Tailwind yalnızca standart layout/styling'de kullanılır. Mobilde kaynak kartları ve sonuç alanı tek sütuna düşer. Klavye erişimi, görünür focus, WCAG uyumlu kontrast, tablo başlıkları, metinle desteklenen durum etiketleri ve `aria-live` geri bildirim uygula.
 
-## Uygulama ve güvenlik kararları
+## Gizlilik, doğruluk ve sınırlar
 
-- Strict TypeScript, Zod, resmi `@modelcontextprotocol/sdk`, CSV/XLSX parser, `pg` ve `pg-query-stream` kullanılır. MCP araçları `compare_datasets`, `find_missing_records`, `detect_duplicates`, `detect_value_mismatches`, `generate_report` olup JSON/structuredContent ve Markdown döndürür.
-- PostgreSQL için yalnız TLS, salt okunur transaction, quoted identifiers, seçili sütunlar, parametreli limit ve bağlantı/query timeout; keyfî SQL çalıştırma yok. REST yalnız HTTPS GET, redirect kapalı, exact host allow-list, DNS public-IP doğrulama ve resolve-IP pinleme.
-- Zod doğrulaması ve dosya/gövde/kayıt/column/response/time limitleri. Kullanıcı onayıyla dosya başına en çok 4 MB, ek yük dahil HTTP request başına 4,25 MB; kaynak başına 10.000 kayıt ve 100 sütun; en çok 15 saniye; response 2 MB. XLSX ZIP açılışı da giriş sayısı, toplam boyut, entry boyutu ve compression ratio ile sınırlanır. Aşımda request reddedilir, sessiz kırpma olmaz.
-- Uygulama loglarında gövde/credential/sonuç yok; veri yazımı yok; browser local storage yok; analytics/telemetry kapalı. Testler yalnız sentetik veri kullanır ve log/storage kısıtlarını statik olarak kontrol eder. Uygulama verisini üçüncü taraf AI'ye iletme yok.
+- Tüm hesaplamalar deterministiktir; finansal eşleştirme/veride AI yok. Yüklenen/verilen veri yalnız isteğin belleğinde işlenir; dosya, sonuç, tema veya kullanıcı verisi saklanmaz. Analitik/telemetri kapalı; gövde, değer, kimlik bilgisi ve sonuç loglanmaz. Vercel/GitHub sağlayıcı kayıtlarının uygulama denetimi dışındaki sınırları belgelerde açıklanır.
+- PostgreSQL salt okunur TLS/parametreli sorgu/quoted identifier kullanır. REST yalnız HTTPS GET, açık host/port allow-list, redirect kapalı ve DNS pinleme ile çalışır. Keyfî SQL/shell/yüklenen kod çalıştırılmaz.
+- Vercel Free/Hobby payload ile uyumlu kullanıcı onaylı bütçe: dosya başına 4 MB; HTTP isteği bütçesi ekler dâhil 4,25 MB; kaynak başına 10.000 kayıt ve 100 sütun; 15 saniye; API yanıtı 2 MB. Aşım reddedilir, sessiz kırpma yapılmaz. XLSX ZIP açılışı ayrıca boyut/oran/sayıyla sınırlanır.
 
 ## Tasarım kararı
 
-- **Tasarım hareketi:** Kullanıcının açıkça istediği yüksek kontrastlı, tek işli veri çalışma yüzeyi; saf siyah zemin ve beyaz metin.
-- **Temel ilkeler:** A/B anında anlaşılır; iki eylemle tamamlanır; sonuç görünür ve indirilebilir; görsel gürültü yok.
-- **Renk yaklaşımı:** Siyah ve beyaz temel kontrasttır; doygun renkler yalnızca RUN düğmesinin kalın kuşaklı kenarında vurgu oluşturur.
-- **Yerleşim:** Tek ana panelde A ve B dosya alanı, otomatik ortak başlık/anahtar bilgisi ve tek RUN eylemi; mobilde düşey sıralama.
-- **İmza öğeleri:** İki eşit A/B dropzone; tek renk-kuşağı RUN düğmesi; sade sonuç sayıları/tablosu.
-- **Etkileşim:** Dosyayı bırak/seç; kimlik başlığı deterministik otomatik bulunur; RUN; sonuç/CSV raporu. MCP düğmesi endpoint'i kopyalar. Anahtar girişi/seçimi, gereksiz modal/tabs yok.
-- **Animasyon:** Yalnız RUN hover/focus glow; `prefers-reduced-motion` durumunda geçiş kapalı.
-- **Tipografi:** Radix Themes sistem yazı tipi; başlık ve kısa etiketler, paragraf metnini minimumda tut.
-- **Marka özü:** “İki dosya. Net mutabakat.” — titiz, sade, güven veren.
-- **Ses ve örnek mikrocopy:** Kısa ve işlevsel: “A dosyasını bırak”, “B dosyasını bırak”.
-- **Wordmark/işaret:** Özel ikon ve logo sistemi yok; yalnız metinsel ad kullanılır.
-- **Vurgu rengi:** Marka paleti icat edilmez; renk yalnızca istenen RUN kenarında gradient olarak görünür.
+- **Tasarım hareketi:** Finans operasyon araçlarının sakin, veri odaklı B2B dashboard estetiği; yeni eklenen kullanıcı referansı ana yönü belirler.
+- **Temel ilkeler:** A/B açık hiyerarşisi; sonuçta önce durum/özet, sonra ayrıntı; erişilebilir kontrast; her kontrol görünür ve gerçekten işlevsel.
+- **Renk yaklaşımı:** Açık temada beyaz/kırık beyaz yüzeyler ve mavi eylem; koyu temada derin gri yüzeyler ve aynı mavi vurgu. Başarı/uyuşmazlık/uyarı renkleri etiket ve sayı ile birlikte kullanılır; renk tek başına anlam taşımaz.
+- **Yerleşim:** Üstte ürün/tema/MCP bağlantısı; hemen altında yan yana iki kaynak kartı; altta responsive sonuç workspace'i, tablo/özet ve eylem paneli. Küçük ekranda tek sütun.
+- **İmza öğeleri:** A/B kaynak kartları; kompakt dört-beş metrik özeti ve durum dağılımı; sekmeli sonuç tablosu.
+- **Etkileşim:** Dosya seç/bırak → otomatik ortak anahtar ve ayarları doğrula → RUN → ilerleme/hata → sonuçlar/CSV. Sekmeler ve yalnız-fark filtresi aynı gerçek sonuç kümesini kullanır. Tema switch'i sayfa yeniden yüklemesinde sıfırlanır (kalıcı saklama yok).
+- **Hareket:** Yalnız kısa hover/focus geçişleri ve upload durum geri bildirimi; `prefers-reduced-motion` etkin olduğunda geçiş kapalı.
+- **Tipografi:** Radix Themes sistem yazı tipi; başlık ve tablo etiketleri belirgin, yardımcı metin kısa.
+- **Marka özü:** “İki dosya. Net mutabakat.” — titiz, anlaşılır, güven veren.
+- **Ses ve mikrocopy:** Kısa ve yönlendirici: “A dosyasını bırak”, “Farkları gör”.
+- **Wordmark/işaret:** Mevcut metinsel Reconcile MCP adı; harici ikon/illustrasyon gereksiz.
+- **Vurgu rengi:** Mavi eylem rengi, statü renkleri yalnız semantik anlamda.
 
 ## Proje yapısı
 
-- `api/`: Vercel function'ları (`mcp.ts`, `reconcile.ts`).
-- `src/core/`: karşılaştırma algoritması, ortak tipler ve rapor.
-- `src/sources/`: Zod şemaları; CSV/XLSX, PostgreSQL/REST parser/loader; ağ/limit korumaları.
-- `src/mcp/`: ortak MCP tool tanımları ve yerel STDIO giriş noktası.
-- `src/server/`: HTTP body parse, `/api/reconcile`, `/api/mcp` handlers ve Vite yerel sunucusu.
-- `src/ui/`: tek-screen dosya drop, otomatik ortak anahtar, RUN, sonuç/CSV linki.
-- `tests/`: sentetik compare, parser, security/privacy, HTTP ve MCP protocol tests.
-- `.github/workflows/quality.yml`: typecheck, lint, test, production audit, build kalite kapısı.
+- `api/`: Vercel MCP ve reconcile functions.
+- `src/core/`: karşılaştırma algoritması, ortak tipler, sınırlı sonuç önizlemesi ve CSV raporu.
+- `src/sources/`: Zod şemaları; CSV/XLSX, PostgreSQL/REST ve ağ/limit korumaları.
+- `src/mcp/`: ortak MCP araçları ve yerel STDIO başlangıcı.
+- `src/server/`: HTTP body parser ve `/api/reconcile`/`/api/mcp` handler'ları.
+- `src/ui/`: A/B dropzone, light/dark dashboard, gerçek sonuç sekmeleri/filtreleri ve report indirme.
+- `tests/`: deterministik algoritma, parser, güvenlik/gizlilik, HTTP/MCP entegrasyon testleri.
+- `.github/workflows/quality.yml`: strict TypeScript, lint, test, production dependency audit ve build kalite kapısı.
 - `public/manus-routes.json`: tek sayfa `/` rotası.
 
-## DevOps ve dağıtım
+## DevOps ve yayın
 
-Node 22 ve pnpm 11.25.0 sabitlenir; lifecycle/build izinleri workspace yapılandırmasında tutulur. GitHub deposu public/MIT kaynak kodu için kullanılır, her push/PR CI çalıştırır. `main` için gerekli check/PR koruması Vercel production deployment'ını yalnız başarılı CI commit'lerinde başlatacak şekilde ayarlanır. Vercel Git bağlantısı Vite build'i (`pnpm install --frozen-lockfile`, `pnpm build`, `dist`) ve `/api/*` functions'ı deploy eder. Analytics kapalı kalır. Production ana sayfa, public HTTPS `/api/mcp` initialize/tools-list ve en az bir sentetik tool round-trip doğrulandıktan sonra teslim tamamlanır. Vercel'in ücretsiz katman payload ve log/retention sınırları dokümantasyonda belirtilir.
+Mevcut GitHub/Vercel bağlantısını koru. Her push ve PR'da zorunlu kalite workflow'u; `main` yalnız başarılı `quality` kontrolü bulunan PR ile değişsin. Vercel Git entegrasyonu production'u yalnız `main` commit'lerinde otomatik yayınlasın, PR preview'larını SSO ile korusun. Production deploy sonrası ana sayfa/manifest, Streamable HTTP `initialize`, `tools/list` ve sentetik `compare_datasets` round-trip HTTP ile doğrulansın. Üretim anahtarı, kullanıcı datası veya gerçek dış kaynak bağlantısı testlerde kullanılmasın.

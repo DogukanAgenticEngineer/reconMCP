@@ -56,6 +56,39 @@ describe('deterministic reconciliation', () => {
     expect(JSON.stringify(first)).toBe(JSON.stringify(second));
   });
 
+  it('supports optional case-insensitive text values and reports unique matched rows', () => {
+    const sourceA: Dataset = { name: 'A', columns: ['ID', 'label'], rows: [{ ID: 'x', label: 'North' }] };
+    const sourceB: Dataset = { name: 'B', columns: ['id', 'LABEL'], rows: [{ id: 'x', LABEL: 'north' }] };
+    const compareOptions = { keyPairs: [{ left: 'ID', right: 'id' }], fieldPairs: [{ left: 'label', right: 'LABEL' }] };
+    const strict = compareDatasets(sourceA, sourceB, compareOptions);
+    const relaxed = compareDatasets(sourceA, sourceB, { ...compareOptions, caseSensitiveValues: false });
+
+    expect(strict.summary.matchedKeys).toBe(1);
+    expect(strict.summary.matchedRows).toBe(0);
+    expect(strict.summary.mismatchedRows).toBe(1);
+    expect(strict.comparisonPreview[0]?.status).toBe('mismatch');
+    expect(relaxed.summary.matchedRows).toBe(1);
+    expect(relaxed.summary.valueMismatches).toBe(0);
+    expect(relaxed.comparisonPreview[0]?.status).toBe('match');
+  });
+
+  it('prioritizes all non-match groups before limiting a large comparison preview', () => {
+    const rowsA = Array.from({ length: 56 }, (_, index) => ({ id: String(index), amount: '1' }));
+    const rowsB = rowsA.map((row) => ({ ...row }));
+    const last = rowsB[55];
+    if (!last) throw new Error('Synthetic test row was not created.');
+    last.amount = '2';
+    const sourceA: Dataset = { name: 'A', columns: ['id', 'amount'], rows: rowsA };
+    const sourceB: Dataset = { name: 'B', columns: ['id', 'amount'], rows: rowsB };
+    const result = compareDatasets(sourceA, sourceB, { keyPairs: [{ left: 'id', right: 'id' }] });
+
+    expect(result.comparisonPreview).toHaveLength(50);
+    expect(result.previewTruncated).toBe(true);
+    expect(result.comparisonPreview[0]?.status).toBe('mismatch');
+    expect(result.comparisonPreview.filter((row) => row.status !== 'match')).toHaveLength(1);
+    expect(result.summary.matchedRows).toBe(55);
+  });
+
   it('neutralizes spreadsheet formula injection in text cells', () => {
     const malicious: Dataset = { name: 'A', columns: ['id', 'value'], rows: [{ id: '1', value: '=HYPERLINK("https://attacker.invalid")' }] };
     const empty: Dataset = { name: 'B', columns: ['id', 'amount'], rows: [{ id: '1', amount: '1' }] };
