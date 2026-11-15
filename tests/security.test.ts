@@ -58,6 +58,12 @@ describe('source security boundaries', () => {
     expect(readFileSync(resolve(root, 'src/ui/ResultsPanel.tsx'), 'utf8')).toMatch(/<Tabs\.Root/);
     expect(app).toMatch(/<Switch\b/);
     expect(readFileSync(resolve(root, 'src/ui/SourceCard.tsx'), 'utf8')).toMatch(/onDrop=/);
+    const styles = readFileSync(resolve(root, 'src/ui/styles.css'), 'utf8');
+    const runStyle = styles.match(/\.run-button\.rt-Button\s*\{[^}]+\}/)?.[0] ?? '';
+    const glowStyle = styles.match(/\.run-button\.rt-Button:hover[^{]+\{[^}]+\}/)?.[0] ?? '';
+    expect(runStyle).toMatch(/border:\s*3px solid transparent/);
+    expect(runStyle).toMatch(/linear-gradient/);
+    expect(glowStyle).toMatch(/box-shadow:[^;]*rgba/);
     const manifest = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8')) as { dependencies: Record<string, unknown> };
     expect(JSON.stringify(Object.keys(manifest.dependencies))).not.toMatch(/openai|anthropic|gemini|cohere/i);
   });
