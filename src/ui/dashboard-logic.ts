@@ -1,14 +1,18 @@
-import type { ComparisonPreviewRow, ReconciliationResult, Scalar } from '../core/types.js';
+import type { ComparisonPreviewRow, ComparisonStatus, ReconciliationResult, Scalar } from '../core/types.js';
 
 export const MAX_FILE_BYTES = 4 * 1024 * 1024;
 export const MAX_COMBINED_BYTES = Math.floor(4.25 * 1024 * 1024);
 export const FORM_OVERHEAD_RESERVE = 4096;
 export const ACCEPTED_FILES = '.csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 export const PREVIEW_ROW_LIMIT = 50;
+export const MAX_KEY_PAIRS = 10;
+export const MAX_FIELD_PAIRS = 100;
 
 export type Side = 'left' | 'right';
 export type SourceFormat = 'csv' | 'xlsx';
 export type ResultResponse = ReconciliationResult & { reportCsv: string };
+export type Pair = { left: string; right: string };
+export type PreviewStatusFilter = 'all' | ComparisonStatus;
 
 export interface SourceUpload {
   file: File | null;
@@ -17,11 +21,6 @@ export interface SourceUpload {
   busy: boolean;
   error: string;
   dragging: boolean;
-}
-
-export interface FieldPair {
-  left: string;
-  right: string;
 }
 
 export function emptyUpload(): SourceUpload {
@@ -39,14 +38,14 @@ export function normalizedColumnName(name: string): string {
   return name.normalize('NFKC').toLocaleLowerCase('en-US').replace(/[^a-z0-9]/g, '');
 }
 
-export function commonFieldPairs(leftColumns: string[], rightColumns: string[]): FieldPair[] {
+export function commonFieldPairs(leftColumns: string[], rightColumns: string[]): Pair[] {
   const rightByNormalized = new Map<string, string>();
   for (const column of rightColumns) {
     const normalized = normalizedColumnName(column);
     if (normalized && !rightByNormalized.has(normalized)) rightByNormalized.set(normalized, column);
   }
   const usedRight = new Set<string>();
-  const pairs: FieldPair[] = [];
+  const pairs: Pair[] = [];
   for (const left of leftColumns) {
     const normalized = normalizedColumnName(left);
     const right = rightByNormalized.get(normalized);
@@ -61,7 +60,7 @@ const PREFERRED_KEYS = [
   'id', 'uuid', 'key', 'recordid', 'invoiceid', 'transactionid', 'accountid', 'customerid', 'reference', 'ref', 'code',
 ];
 
-export function chooseKeyPair(pairs: FieldPair[]): FieldPair | null {
+export function chooseKeyPair(pairs: Pair[]): Pair | null {
   for (const preferred of PREFERRED_KEYS) {
     const pair = pairs.find(({ left }) => normalizedColumnName(left) === preferred);
     if (pair) return pair;
@@ -69,8 +68,37 @@ export function chooseKeyPair(pairs: FieldPair[]): FieldPair | null {
   return pairs[0] ?? null;
 }
 
-export function filteredPreview(rows: ComparisonPreviewRow[], onlyDifferences: boolean): ComparisonPreviewRow[] {
-  return onlyDifferences ? rows.filter((row) => row.status !== 'match') : rows;
+export function isValidPairSelection(pairs: Pair[], leftColumns: string[], rightColumns: string[], maximum: number, minimum = 0): boolean {
+  if (pairs.length < minimum || pairs.length > maximum) return false;
+  const usedLeft = new Set<string>();
+  const usedRight = new Set<string>();
+  return pairs.every(({ left, right }) => {
+    if (!leftColumns.includes(left) || !rightColumns.includes(right) || usedLeft.has(left) || usedRight.has(right)) return false;
+    usedLeft.add(left);
+    usedRight.add(right);
+    return true;
+  });
+}
+
+export function isValidTolerance(value: string): boolean {
+  if (value === '') return true;
+  return value.length <= 50 && /^\d{1,30}(?:\.\d{1,18})?$/.test(value);
+}
+
+export function filteredPreview(
+  rows: ComparisonPreviewRow[],
+  onlyDifferences: boolean,
+  query = '',
+  status: PreviewStatusFilter = 'all',
+  searchTextByKey: ReadonlyMap<string, string> = new Map(),
+): ComparisonPreviewRow[] {
+  const normalizedQuery = query.trim().toLocaleLowerCase('en-US');
+  return rows.filter((row) => {
+    if (onlyDifferences && row.status === 'match') return false;
+    if (status !== 'all' && row.status !== status) return false;
+    const searchableText = `${row.key} ${searchTextByKey.get(row.key) ?? ''}`;
+    return !normalizedQuery || searchableText.toLocaleLowerCase('en-US').includes(normalizedQuery);
+  });
 }
 
 export function displayScalar(value: Scalar | undefined): string {

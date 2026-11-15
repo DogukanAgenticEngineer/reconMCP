@@ -7,6 +7,8 @@ import { restSourceSchema, rowsSourceSchema } from '../src/sources/schemas.js';
 
 const root = process.cwd();
 
+const read = (path: string): string => readFileSync(resolve(root, path), 'utf8');
+
 describe('source security boundaries', () => {
   it('enforces the agreed Vercel payload budget and per-file cap', () => {
     expect(MAX_FILE_BYTES).toBe(4 * 1024 * 1024);
@@ -38,35 +40,49 @@ describe('source security boundaries', () => {
     expect(() => rowsSourceSchema.parse({ type: 'rows', rows: [{ id: { nested: true } }] })).toThrow();
   });
 
-  it('runtime paths contain no body/credential logging, durable storage, telemetry, or third-party AI clients', () => {
+  it('keeps runtime free of body/credential logging, durable storage, telemetry and third-party AI clients', () => {
     const runtimeFiles = [
       'api/mcp.ts', 'api/reconcile.ts', 'src/server/mcp-handler.ts',
       'src/server/reconcile-handler.ts', 'src/sources/load.ts', 'src/sources/load-mcp.ts',
-      'src/mcp/create-server.ts', 'src/ui/App.tsx', 'src/ui/SourceCard.tsx', 'src/ui/ResultsPanel.tsx', 'src/ui/main.tsx', 'src/core/report.ts',
+      'src/mcp/create-server.ts', 'src/ui/App.tsx', 'src/ui/SourceCard.tsx',
+      'src/ui/ResultsPanel.tsx', 'src/ui/ReconciliationSettings.tsx', 'src/ui/McpConnectDialog.tsx',
+      'src/ui/main.tsx', 'src/core/report.ts',
     ];
     for (const file of runtimeFiles) {
-      const source = readFileSync(resolve(root, file), 'utf8');
+      const source = read(file);
       expect(source, file).not.toMatch(/console\.(?:log|info|warn|error)\s*\(/);
       expect(source, file).not.toMatch(/\b(?:writeFile|writeFileSync|appendFile|appendFileSync|createWriteStream)\s*\(/);
       expect(source, file).not.toMatch(/\b(?:localStorage|sessionStorage|indexedDB)\b/);
       expect(source, file).not.toMatch(/\b(?:gtag|posthog|mixpanel|segment\.track|Sentry\.init)\b/i);
     }
-    const html = readFileSync(resolve(root, 'index.html'), 'utf8');
+    const html = read('index.html');
     expect(html).not.toMatch(/analytics|tracking|telemetry/i);
-    const app = readFileSync(resolve(root, 'src/ui/App.tsx'), 'utf8');
-    expect(app.match(/<Button\b/g) ?? []).toHaveLength(2);
-    expect(app).toContain("'CONNECT MCP'");
+
+    const app = read('src/ui/App.tsx');
+    const connect = read('src/ui/McpConnectDialog.tsx');
     expect(app).toContain("'RUN'");
-    expect(readFileSync(resolve(root, 'src/ui/ResultsPanel.tsx'), 'utf8')).toMatch(/<Tabs\.Root/);
-    expect(app).toMatch(/<Switch\b/);
-    expect(readFileSync(resolve(root, 'src/ui/SourceCard.tsx'), 'utf8')).toMatch(/onDrop=/);
-    const styles = readFileSync(resolve(root, 'src/ui/styles.css'), 'utf8');
-    const runStyle = styles.match(/\.run-button\.rt-Button\s*\{[^}]+\}/)?.[0] ?? '';
-    const glowStyle = styles.match(/\.run-button\.rt-Button:hover[^{]+\{[^}]+\}/)?.[0] ?? '';
+    expect(app).toContain('<Switch');
+    expect(connect).toContain('CONNECT MCP');
+    expect(app).toContain('/api/mcp');
+    expect(connect).toContain('{endpoint}');
+    expect(read('src/ui/ResultsPanel.tsx')).toContain('<Tabs');
+    expect(read('src/ui/SourceCard.tsx')).toMatch(/onDrop=/);
+    expect(read('src/ui/ReconciliationSettings.tsx')).toContain('Numeric tolerance');
+
+    const server = read('src/mcp/create-server.ts');
+    expect(server).toContain('registerResource');
+    expect(server).toContain('registerPrompt');
+    expect(server).toContain('structuredContent');
+
+    const styles = read('src/ui/styles.css');
+    const runStyle = styles.match(/\.run-button \{[^}]+\}/)?.[0] ?? '';
+    const glowStyle = styles.match(/\.run-button:hover:not\(:disabled\) \{[^}]+\}/)?.[0] ?? '';
     expect(runStyle).toMatch(/border:\s*3px solid transparent/);
     expect(runStyle).toMatch(/linear-gradient/);
-    expect(glowStyle).toMatch(/box-shadow:[^;]*rgba/);
-    const manifest = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8')) as { dependencies: Record<string, unknown> };
-    expect(JSON.stringify(Object.keys(manifest.dependencies))).not.toMatch(/openai|anthropic|gemini|cohere/i);
+    expect(glowStyle).toMatch(/box-shadow:[^;]*rgb/);
+    expect(styles).toContain('prefers-reduced-motion: reduce');
+
+    const manifest = JSON.parse(read('package.json')) as { dependencies: Record<string, unknown> };
+    expect(JSON.stringify(Object.keys(manifest.dependencies))).not.toMatch(/openai|anthropic|gemini|cohere|@radix-ui\/themes/i);
   });
 });
