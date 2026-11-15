@@ -10,7 +10,7 @@
 - MCP bağlantı düğmesi gerçek `/api/mcp` URL'sini panoya kopyalasın ve kopyalama başarısını bildirsin; harici istemciye gerçekten bağlandığı izlenimini vermesin. Başarı, hata, boş ve yükleniyor durumları açıkça ele alınsın.
 - Radix Themes mevcut bileşenleriyle sade, responsive, erişilebilir UI kur; kontrastı, focus görünürlüğünü, klavye kullanımını, semantik tablo başlıklarını ve `aria-live` geri bildirimlerini koru. Gereksiz ikon/animasyon/dependency ekleme; Tailwind'i standart layout/styling için kullan.
 
-## 2. Gerçek mutabakat sonucu ve MCP davranışı — Uygulandı; 29/29 yerel test ve production MCP round-trip geçti
+## 2. Gerçek mutabakat sonucu ve MCP davranışı — Uygulandı; 30/30 yerel test ve production MCP round-trip geçti
 - CSV, XLSX, salt okunur PostgreSQL ve REST API kaynaklarını destekle. Eksik kayıtları, yinelenen kayıtları, değer/tutar uyuşmazlıklarını ve şema tutarsızlıklarını belirle; doğru özet ve indirilebilir mutabakat raporu oluştur.
 - TypeScript strict, resmi `@modelcontextprotocol/sdk`, Zod, Streamable HTTP ve yerel STDIO desteğini koru.
 - `compare_datasets`, `find_missing_records`, `detect_duplicates`, `detect_value_mismatches`, `generate_report` araçlarını ve yapılandırılmış JSON/Markdown/structured MCP içeriğini koru; ChatGPT ve diğer MCP istemcileri ile uyumlu kal.
