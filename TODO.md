@@ -22,11 +22,11 @@
 
 ## 4. Test/CI/CD kalite kapısı — GitHub'da etkin ve PR ile doğrulandı
 - Vitest unit ve integration, MCP protokol, CSV/XLSX parser, mutabakat doğruluğu, güvenlik/girdi doğrulama, sıfır-saklama/hassas log kontrolleri; TypeScript strict, ESLint, üretim dependency audit ve production build.
-- GitHub Actions her push ve pull request'te çalışır. GitHub'daki etkin `main-ci-gate` ruleset `main` değişikliğini PR ile sınırlar, `Reconcile MCP CI` workflow'unun `quality` kontrolünü şart koşar ve bypass aktörü tanımlamaz; bu koşullar sağlanmadan production `main` güncellenemez. PR #1'de push ve pull-request çalışmaları başarılı oldu ve değişiklik kurallara uyarak squash-merge edildi.
+- GitHub Actions her push ve pull request'te çalışır. GitHub'daki etkin `main-ci-gate` ruleset `main` değişikliğini PR ile sınırlar, `Reconcile MCP CI` workflow'unun `quality` kontrolünü şart koşar ve bypass aktörü tanımlamaz. PR değişiklikleri zorunlu kontroller başarılı olduktan sonra squash-merge edildi.
 - MIT `LICENSE`, `README.md`, `PRIVACY.md`, `SECURITY.md`, `DATA_RETENTION.md`, `THREAT_MODEL.md`, `.env.example` dosyalarını teslim et; kurulum/deployment/MCP bağlantısı/gizlilik sınırlarını belgele.
 
-## 5. GitHub ve Vercel — GitHub tamamlandı; Vercel yetki engeli
-- Açık kaynak uygulama için `DogukanAgenticEngineer/reconMCP` public GitHub deposu oluşturuldu, proje ve GitHub Actions workflow'u bağlandı; ilk `main` CI çalışması başarılı.
-- Vercel'in ücretsiz katmanına uygun production deployment yap; public HTTPS MCP endpoint'i `/api/mcp`'de yayınla. Vercel Hobby ekibinde mevcut proje yok; proje oluşturma API'si HTTP 403 `forbidden` döndürdü ve bu ortamda oturum açmış Vercel CLI bulunmuyor. Yeni deneme için Vercel'de proje oluşturma yetkisi olan ekip erişimi gerekir.
-- Production siteyi ve MCP initialize/tools-list/call akışlarını doğrula; gerçek GitHub repo URL'si README'de vardır; Vercel URL'si ancak erişim sağlandıktan ve production deploy başarılı olduktan sonra eklenecektir.
+## 5. GitHub ve Vercel — Production yayında ve doğrulandı
+- Açık kaynak uygulama `DogukanAgenticEngineer/reconMCP` public GitHub deposunda; GitHub Actions ve korumalı `main` kuralları etkin.
+- Vercel Hobby'de `recon-mcp` projesi GitHub `main` branch'ine bağlı; production deployment `READY`. Production web uygulaması: https://recon-mcp.vercel.app; herkese açık MCP endpoint'i: https://recon-mcp.vercel.app/api/mcp. Vercel SSO yalnız preview deployment'larında korunur.
+- Production smoke testleri: ana sayfa ve `/manus-routes.json` HTTP 200; MCP `initialize`, `tools/list` ve `compare_datasets` çağrısı HTTP 200. Sentetik 1 satır karşılaştırmasında beklenen tek tutar uyuşmazlığı raporlandı.
 - İskelet/maketle yetinme. Son öncelik sırası: gizlilik, güvenlik, doğruluk, sadelik; ek özellik uğruna gizlilik/güvenlikten ödün verme.

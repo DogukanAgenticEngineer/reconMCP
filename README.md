@@ -61,13 +61,13 @@ Yerel MCP STDIO için `pnpm start:stdio` çalıştırın. MCP istemcisinin çal�
       "command": "pnpm",
       "args": ["--dir", "/path/to/reconcile", "start:stdio"]
     }
-  }
+}
 }
 ```
 
 ## MCP ile bağlanma
 
-Production Streamable HTTP endpoint'i `https://<deployment-domain>/api/mcp` biçimindedir. ChatGPT veya başka MCP istemcisine bu URL'yi ekleyin. Sunucu açık bir endpoint'tir; kullanıcı/veritabanı API kimlik bilgilerini yalnız kendi tool çağrısında göndermelidir. Kaynak bağlantısı, sunucu tarafı `RECONCILE_ALLOWED_HOSTS` allow-list'inde tam eşleşme gerektirir. `generate_report` çıktısındaki CSV `structuredContent.reportCsv` alanındadır.
+Canlı Streamable HTTP MCP endpoint'i [`https://recon-mcp.vercel.app/api/mcp`](https://recon-mcp.vercel.app/api/mcp); web uygulaması [`https://recon-mcp.vercel.app`](https://recon-mcp.vercel.app) adresindedir. MCP uyumlu istemciye endpoint URL'sini ekleyin. Production herkese açıktır; Vercel SSO yalnız preview deployment'larında etkin. Kaynak bağlantısı sunucu tarafındaki `RECONCILE_ALLOWED_HOSTS` allow-list'inde tam eşleşme gerektirir. `generate_report` çıktısındaki CSV `structuredContent.reportCsv` alanındadır.
 
 Basit tool çağrısı girdisi:
 
@@ -87,7 +87,7 @@ CSV kaynağı MCP argümanında `{"type":"csv","content":"..."}`; XLSX `{"type":
 
 GitHub Actions `.github/workflows/quality.yml` her push ve PR'da strict typecheck, lint, sentetik unit/integration ve MCP protocol testleri, production dependency audit ve production build çalıştırır. GitHub'da etkin `main-ci-gate` ruleset'i `main` güncellemelerini PR'larla sınırlar; `Reconcile MCP CI` workflow'unun `quality` kontrolü güncel `main` üzerine başarılı olmalı ve ruleset'te bypass aktörü yoktur. Tek bakımcı akışını durdurmamak için insan onay sayısı sıfırdır; CI kontrolü zorunludur.
 
-Vercel production projesi henüz oluşturulmadı; public HTTPS endpoint/production URL henüz yok. Dağıtım için bu repository'yi `main` production branch'i ile Vercel Hobby projesine bağlayın; install `pnpm install --frozen-lockfile`, build `pnpm build`, output `dist` olarak ayarlayın. Proje oluşturma izni olan Vercel ekip üyeliği gerekir. Bağlandıktan sonra korumalı `main`'e yalnız başarılı CI ardından merge edilmesi production dağıtımını tetikler; PR'lar preview alabilir. Proje ortamına yalnız gerekli hostları `RECONCILE_ALLOWED_HOSTS` ve izinli DB portlarını `RECONCILE_ALLOWED_POSTGRES_PORTS` olarak girin; bağlantı gizli anahtarlarını repository'ye commit etmeyin. Boş allow-list ağ kaynaklarını reddeder. Uygulama analytics/telemetry kullanmaz; veritabanı/storage kurulumu yoktur.
+Vercel Hobby projesi `recon-mcp`, bu GitHub repository'sine bağlıdır; install `pnpm install --frozen-lockfile`, build `pnpm build`, output `dist` kullanır. Production branch `main`'e yalnız zorunlu `quality` kontrolü başarılı PR merge'iyle güncelleme yapılır ve GitHub bağlantısı Vercel production deployment'ını otomatik tetikler; PR preview'ları SSO korumalıdır. Ağ kaynakları kullanacaksanız Vercel ortamına yalnız gerekli hostları `RECONCILE_ALLOWED_HOSTS` ve izinli DB portlarını `RECONCILE_ALLOWED_POSTGRES_PORTS` olarak girin; bağlantı gizli anahtarlarını repository'ye commit etmeyin. Boş allow-list ağ kaynaklarını reddeder. Uygulama analytics/telemetry kullanmaz; veritabanı/storage kurulumu yoktur.
 
 ## Güvenlik ve gizlilik
 
