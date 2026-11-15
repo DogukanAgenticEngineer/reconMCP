@@ -185,7 +185,7 @@ function App() {
                 <Switch id="theme-toggle" checked={appearance === 'dark'} onCheckedChange={(checked) => setAppearance(checked ? 'dark' : 'light')} aria-label="Toggle dark theme" />
               </div>
               <Button type="button" variant="outline" onClick={() => void copyMcp()} aria-label="Copy MCP endpoint URL">
-                {copied ? 'Copied' : 'Connect MCP'}
+                {copied ? 'Copied' : 'CONNECT MCP'}
               </Button>
             </div>
           </header>
@@ -214,7 +214,7 @@ function App() {
                   <Text as="div" size="3" weight="bold">Run</Text>
                   <Text as="p" size="1" color="gray" className="action-copy">Compare the selected sources using the automatic key and mapped fields.</Text>
                   <Button type="button" className="run-button" onClick={() => void run()} disabled={!ready} aria-busy={working}>
-                    {working ? 'Comparing…' : 'Run reconciliation'}
+                    {working ? 'Comparing…' : 'RUN'}
                   </Button>
                   {left.file && right.file && <Text as="div" size="1" color={overBudget ? 'red' : 'gray'} className="budget-note">Request budget: {formatBytes(requestBytes)} / 4.25 MB</Text>}
                   {overBudget && <Text as="p" role="alert" size="1" color="red">Combined files exceed the request limit.</Text>}

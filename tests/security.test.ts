@@ -55,6 +55,8 @@ describe('source security boundaries', () => {
     expect(html).not.toMatch(/analytics|tracking|telemetry/i);
     const app = readFileSync(resolve(root, 'src/ui/App.tsx'), 'utf8');
     expect(app.match(/<Button\b/g) ?? []).toHaveLength(2);
+    expect(app).toContain("'CONNECT MCP'");
+    expect(app).toContain("'RUN'");
     expect(readFileSync(resolve(root, 'src/ui/ResultsPanel.tsx'), 'utf8')).toMatch(/<Tabs\.Root/);
     expect(app).toMatch(/<Switch\b/);
     expect(readFileSync(resolve(root, 'src/ui/SourceCard.tsx'), 'utf8')).toMatch(/onDrop=/);
