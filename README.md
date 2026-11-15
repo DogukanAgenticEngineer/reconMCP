@@ -67,7 +67,7 @@ Yerel MCP STDIO için `pnpm start:stdio` çalıştırın. MCP istemcisinin çal�
 
 ## MCP ile bağlanma
 
-Canlı Streamable HTTP MCP endpoint'i [`https://recon-mcp.vercel.app/api/mcp`](https://recon-mcp.vercel.app/api/mcp); web uygulaması [`https://recon-mcp.vercel.app`](https://recon-mcp.vercel.app) adresindedir. MCP uyumlu istemciye endpoint URL'sini ekleyin. Production herkese açıktır; Vercel SSO yalnız preview deployment'larında etkin. Kaynak bağlantısı sunucu tarafındaki `RECONCILE_ALLOWED_HOSTS` allow-list'inde tam eşleşme gerektirir. `generate_report` çıktısındaki CSV `structuredContent.reportCsv` alanındadır.
+Canlı Streamable HTTP MCP endpoint'i [`https://recon-mcp-dgn15.vercel.app/api/mcp`](https://recon-mcp-dgn15.vercel.app/api/mcp); web uygulaması [`https://recon-mcp-dgn15.vercel.app`](https://recon-mcp-dgn15.vercel.app) adresindedir. MCP uyumlu istemciye endpoint URL'sini ekleyin. Production herkese açıktır; Vercel SSO yalnız preview deployment'larında etkin. Kaynak bağlantısı sunucu tarafındaki `RECONCILE_ALLOWED_HOSTS` allow-list'inde tam eşleşme gerektirir. `generate_report` çıktısındaki CSV `structuredContent.reportCsv` alanındadır.
 
 Basit tool çağrısı girdisi:
 
