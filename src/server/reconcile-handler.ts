@@ -57,6 +57,7 @@ async function compare(input: unknown, files: Map<string, Buffer>): Promise<unkn
     ...(request.tolerance ? { tolerance: request.tolerance } : {}),
     trimWhitespace: request.trimWhitespace,
     caseSensitiveKeys: request.caseSensitiveKeys,
+    caseSensitiveValues: request.caseSensitiveValues,
   }) as CompareOptions;
   const result = compareDatasets(left, right, options);
   const response = { ...result, reportCsv: resultToCsv(result) };
@@ -96,6 +97,7 @@ export async function handleReconcileRequest(req: IncomingMessage, res: ServerRe
         ...(multipart.fields.tolerance ? { tolerance: multipart.fields.tolerance } : {}),
         trimWhitespace: multipart.fields.trimWhitespace !== 'false',
         caseSensitiveKeys: multipart.fields.caseSensitiveKeys !== 'false',
+        caseSensitiveValues: multipart.fields.caseSensitiveValues !== 'false',
       };
     } else if (contentType === 'application/json') {
       payload = await readJsonBody(req);

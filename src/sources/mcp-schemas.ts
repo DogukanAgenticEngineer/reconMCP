@@ -32,6 +32,7 @@ export const mcpCompareInputSchema = z.object({
   tolerance: z.string().regex(/^\d{1,30}(?:\.\d{1,18})?$/).max(50).optional(),
   trimWhitespace: z.boolean().default(true),
   caseSensitiveKeys: z.boolean().default(true),
+  caseSensitiveValues: z.boolean().default(true),
 }).strict();
 
 export type McpSource = z.infer<typeof mcpSourceSchema>;

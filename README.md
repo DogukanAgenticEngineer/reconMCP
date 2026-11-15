@@ -6,7 +6,9 @@ Reconcile MCP, iki CSV/Excel (XLSX), salt okunur PostgreSQL veya REST kaynağın
 
 ## Özellikler
 
-- Arayüzde yalnız A/B CSV/XLSX dropzone'ları, MCP endpoint URL'sini kopyalayan `CONNECT MCP` düğmesi ve `RUN` düğmesi bulunur. Ortak başlıklardan kimlik alanı deterministik seçilir (`id`/`uuid`/`key` vb. önce; yoksa ilk ortak başlık); diğer ortak alanlar sıfır toleransla karşılaştırılır. CSV raporu bağlantı olarak indirilebilir.
+- Responsive dashboard'da A/B için CSV/XLSX sürükle-bırak veya klavyeyle dosya seçme, dosya adı/biçimi/boyutu/satır ve sütun bilgisi, ortak başlıklardan otomatik kimlik alanı seçimi (`id`/`uuid`/`key` vb. öncelikli; yoksa ilk ortak alan), `Comparison`/`Differences`/`Summary` sekmeleri, canlı özet metrikleri ve tema geçişi vardır. Açık tema varsayılandır; tercih yalnız sayfa belleğinde kalır.
+- `Ignore case (text)`, `Trim whitespace` ve `Show only differences` ayarları sırasıyla karşılaştırma, eşleştirme ve görünür tabloyu gerçekten değiştirir. `CONNECT MCP` yalnızca o ortamın `/api/mcp` URL'sini panoya kopyalar; istemci bağlantısı kurduğunu iddia etmez. `RUN` karşılaştırmayı başlatır; CSV indirme bağlantısı tüm fark kategorilerini içerir.
+- Dashboard'ın karşılaştırma önizlemesi en fazla 50 anahtar grubunu gösterir ve fark gruplarını önceleyerek `Show only differences` filtresini korur. Ayrıntı ve önizleme sınırları açıkça yazılır; indirilen CSV tam fark raporudur.
 - CSV ve XLSX (ilk çalışma sayfası) bellekten ayrıştırma; PostgreSQL'de quoted identifier ve parametreli LIMIT ile yalnız `SELECT`/read-only transaction; REST'te yalnız HTTPS GET.
 - `compare_datasets`, `find_missing_records`, `detect_duplicates`, `detect_value_mismatches` ve `generate_report` araçları; stateless Streamable HTTP (`/api/mcp`) ile yerel STDIO.
 - JSON structured content ve okunabilir Markdown özeti. Karşılaştırma saf TypeScript'tir; AI kullanmaz.

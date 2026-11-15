@@ -1,7 +1,12 @@
 import Decimal from 'decimal.js';
-import type { CompareOptions, DataRow, Dataset, DuplicateGroup, FieldPair, ReconciliationResult, Scalar } from './types.js';
+import type { CompareOptions, ComparisonPreviewRow, DataRow, Dataset, DuplicateGroup, FieldPair, ReconciliationResult, Scalar } from './types.js';
 
 Decimal.set({ precision: 80, rounding: Decimal.ROUND_HALF_EVEN });
+
+export const COMPARISON_PREVIEW_LIMIT = 50;
+const DISPLAY_KEY_LIMIT = 240;
+
+type KeyOptions = Required<Pick<CompareOptions, 'trimWhitespace' | 'caseSensitiveKeys'>>;
 
 function normalized(value: Scalar, trim: boolean, caseSensitive: boolean): string {
   if (value === null) return 'null:';
@@ -11,7 +16,7 @@ function normalized(value: Scalar, trim: boolean, caseSensitive: boolean): strin
   return `value:${text}`;
 }
 
-function keyOf(row: DataRow, pairs: FieldPair[], side: 'left' | 'right', options: Required<Pick<CompareOptions, 'trimWhitespace' | 'caseSensitiveKeys'>>): string {
+function keyOf(row: DataRow, pairs: FieldPair[], side: 'left' | 'right', options: KeyOptions): string {
   return JSON.stringify(pairs.map((pair) => normalized(row[side === 'left' ? pair.left : pair.right] ?? null, options.trimWhitespace, options.caseSensitiveKeys)));
 }
 
@@ -22,7 +27,12 @@ function keyDisplay(row: DataRow, pairs: FieldPair[], side: 'left' | 'right'): R
   }));
 }
 
-function groups(dataset: Dataset, pairs: FieldPair[], side: 'left' | 'right', options: Required<Pick<CompareOptions, 'trimWhitespace' | 'caseSensitiveKeys'>>): Map<string, DataRow[]> {
+function displayKey(key: Record<string, Scalar>): string {
+  const text = JSON.stringify(key);
+  return text.length > DISPLAY_KEY_LIMIT ? `${text.slice(0, DISPLAY_KEY_LIMIT - 1)}…` : text;
+}
+
+function groups(dataset: Dataset, pairs: FieldPair[], side: 'left' | 'right', options: KeyOptions): Map<string, DataRow[]> {
   const map = new Map<string, DataRow[]>();
   for (const row of dataset.rows) {
     const key = keyOf(row, pairs, side, options);
@@ -56,11 +66,11 @@ function numeric(value: Scalar): Decimal | null {
   }
 }
 
-function valuesEqual(left: Scalar, right: Scalar, tolerance: Decimal, trimWhitespace: boolean): boolean {
+function valuesEqual(left: Scalar, right: Scalar, tolerance: Decimal, trimWhitespace: boolean, caseSensitiveValues: boolean): boolean {
   const leftNumber = numeric(left);
   const rightNumber = numeric(right);
   if (leftNumber && rightNumber) return leftNumber.minus(rightNumber).abs().lte(tolerance);
-  return normalized(left, trimWhitespace, true) === normalized(right, trimWhitespace, true);
+  return normalized(left, trimWhitespace, caseSensitiveValues) === normalized(right, trimWhitespace, caseSensitiveValues);
 }
 
 function markdown(result: Omit<ReconciliationResult, 'markdown'>): string {
@@ -70,6 +80,9 @@ function markdown(result: Omit<ReconciliationResult, 'markdown'>): string {
     '',
     `- Kaynaklar: ${summary.leftSource} ↔ ${summary.rightSource}`,
     `- Satırlar: ${summary.leftRows} ↔ ${summary.rightRows}`,
+    `- Ortak tekil anahtarlar: ${summary.matchedKeys}`,
+    `- Tam eşleşen satırlar: ${summary.matchedRows}`,
+    `- Değer farkı içeren satırlar: ${summary.mismatchedRows}`,
     `- Yalnız sol kaynakta: ${summary.missingOnRight}`,
     `- Yalnız sağ kaynakta: ${summary.missingOnLeft}`,
     `- Yinelenen anahtarlar: ${summary.duplicateKeysOnLeft} (sol), ${summary.duplicateKeysOnRight} (sağ)`,
@@ -90,6 +103,17 @@ function ensureColumns(dataset: Dataset, pairs: FieldPair[], side: 'left' | 'rig
   if (missing.length > 0) throw new Error(`${label} kaynağında eşlenen alan bulunamadı.`);
 }
 
+function addPreview(
+  rows: ComparisonPreviewRow[],
+  key: string,
+  status: ComparisonPreviewRow['status'],
+  leftRows: number,
+  rightRows: number,
+  mismatchFields = 0,
+): void {
+  rows.push({ key, status, leftRows, rightRows, mismatchFields });
+}
+
 export function compareDatasets(left: Dataset, right: Dataset, input: CompareOptions): ReconciliationResult {
   if (left.rows.length > 10_000 || right.rows.length > 10_000 || left.columns.length > 100 || right.columns.length > 100) {
     throw new Error('Kaynak, izin verilen satır veya sütun sınırını aşıyor.');
@@ -97,6 +121,7 @@ export function compareDatasets(left: Dataset, right: Dataset, input: CompareOpt
   const options = {
     trimWhitespace: input.trimWhitespace ?? true,
     caseSensitiveKeys: input.caseSensitiveKeys ?? true,
+    caseSensitiveValues: input.caseSensitiveValues ?? true,
   };
   ensureColumns(left, input.keyPairs, 'left', 'Sol');
   ensureColumns(right, input.keyPairs, 'right', 'Sağ');
@@ -120,20 +145,59 @@ export function compareDatasets(left: Dataset, right: Dataset, input: CompareOpt
 
   const tolerance = new Decimal(input.tolerance ?? '0');
   const mismatches: ReconciliationResult['mismatches'] = [];
+  const mismatchesByKey = new Map<string, number>();
+  let matchedKeys = 0;
+  let matchedRows = 0;
+  let mismatchedRows = 0;
   for (const [key, leftRows] of leftIndex) {
     const rightRows = rightIndex.get(key);
     if (!rightRows || leftRows.length !== 1 || rightRows.length !== 1) continue;
     const leftRow = leftRows[0];
     const rightRow = rightRows[0];
     if (!leftRow || !rightRow) continue;
+    matchedKeys += 1;
+    let rowMismatches = 0;
     for (const pair of fieldPairs) {
       const leftValue = leftRow[pair.left] ?? null;
       const rightValue = rightRow[pair.right] ?? null;
-      if (valuesEqual(leftValue, rightValue, tolerance, options.trimWhitespace)) continue;
+      if (valuesEqual(leftValue, rightValue, tolerance, options.trimWhitespace, options.caseSensitiveValues)) continue;
       mismatches.push({ key: keyDisplay(leftRow, input.keyPairs, 'left'), leftField: pair.left, rightField: pair.right, leftValue, rightValue });
+      rowMismatches += 1;
+    }
+    if (rowMismatches === 0) matchedRows += 1;
+    else {
+      mismatchedRows += 1;
+      mismatchesByKey.set(key, rowMismatches);
     }
   }
 
+  const allComparisonPreview: ComparisonPreviewRow[] = [];
+  for (const [key, leftRows] of leftIndex) {
+    const rightRows = rightIndex.get(key);
+    const first = leftRows[0];
+    if (!first) continue;
+    const display = displayKey(keyDisplay(first, input.keyPairs, 'left'));
+    if (!rightRows) {
+      addPreview(allComparisonPreview, display, leftRows.length > 1 ? 'duplicate' : 'only_left', leftRows.length, 0);
+    } else if (leftRows.length > 1 || rightRows.length > 1) {
+      addPreview(allComparisonPreview, display, 'duplicate', leftRows.length, rightRows.length);
+    } else {
+      const mismatchFields = mismatchesByKey.get(key) ?? 0;
+      addPreview(allComparisonPreview, display, mismatchFields > 0 ? 'mismatch' : 'match', 1, 1, mismatchFields);
+    }
+  }
+  for (const [key, rightRows] of rightIndex) {
+    if (leftIndex.has(key)) continue;
+    const first = rightRows[0];
+    if (!first) continue;
+    addPreview(allComparisonPreview, displayKey(keyDisplay(first, input.keyPairs, 'right')), rightRows.length > 1 ? 'duplicate' : 'only_right', 0, rightRows.length);
+  }
+
+  const comparisonPreview = [
+    ...allComparisonPreview.filter((row) => row.status !== 'match'),
+    ...allComparisonPreview.filter((row) => row.status === 'match'),
+  ].slice(0, COMPARISON_PREVIEW_LIMIT);
+  const previewGroupCount = leftIndex.size + [...rightIndex.keys()].filter((key) => !leftIndex.has(key)).length;
   const leftColumnSet = new Set(left.columns);
   const rightColumnSet = new Set(right.columns);
   const schema = {
@@ -148,6 +212,9 @@ export function compareDatasets(left: Dataset, right: Dataset, input: CompareOpt
       rightSource: right.name,
       leftRows: left.rows.length,
       rightRows: right.rows.length,
+      matchedKeys,
+      matchedRows,
+      mismatchedRows,
       missingOnLeft: onlyOnRight.length,
       missingOnRight: onlyOnLeft.length,
       duplicateKeysOnLeft: leftDuplicates.length,
@@ -159,6 +226,8 @@ export function compareDatasets(left: Dataset, right: Dataset, input: CompareOpt
     missing: { onlyOnLeft, onlyOnRight },
     duplicates: { left: leftDuplicates, right: rightDuplicates },
     mismatches,
+    comparisonPreview,
+    previewTruncated: previewGroupCount > COMPARISON_PREVIEW_LIMIT,
   };
   return { ...partial, markdown: markdown(partial) };
 }
