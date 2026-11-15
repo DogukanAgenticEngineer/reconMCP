@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ComparisonPreviewRow } from '../src/core/types.js';
-import { chooseKeyPair, commonFieldPairs, filteredPreview, formatBytes, isValidPairSelection, isValidTolerance } from '../src/ui/dashboard-logic.js';
+import { chooseKeyPair, commonFieldPairs, estimateMultipartRequestBytes, filteredPreview, formatBytes, isValidPairSelection, isValidTolerance } from '../src/ui/dashboard-logic.js';
 
 describe('dashboard field mapping and filters', () => {
   it('pairs headers despite case and punctuation differences', () => {
@@ -58,5 +58,21 @@ describe('dashboard field mapping and filters', () => {
     expect(formatBytes(768)).toBe('768 B');
     expect(formatBytes(1536)).toBe('2 KB');
     expect(formatBytes(2 * 1024 * 1024)).toBe('2.00 MB');
+  });
+
+  it('includes serialized field mappings and multipart filename/header overhead in request estimates', () => {
+    const files = [
+      { name: 'fileLeft', filename: 'source-a.csv', size: 2 * 1024 * 1024 },
+      { name: 'fileRight', filename: 'source-b.csv', size: 2 * 1024 * 1024 },
+    ];
+    const baseFields = [{ name: 'mode', value: 'compare' }, { name: 'tolerance', value: '0' }];
+    const base = estimateMultipartRequestBytes(baseFields, files);
+    const largeMapping = JSON.stringify(Array.from({ length: 100 }, (_, index) => ({
+      left: `${String(index).padStart(3, '0')}${'a'.repeat(253)}`,
+      right: `${String(index).padStart(3, '0')}${'b'.repeat(253)}`,
+    })));
+    const withMappings = estimateMultipartRequestBytes([...baseFields, { name: 'fieldPairs', value: largeMapping }], files);
+    expect(base).toBeGreaterThan(4 * 1024 * 1024);
+    expect(withMappings - base).toBeGreaterThan(50_000);
   });
 });

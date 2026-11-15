@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label.js';
 import { Switch } from '@/components/ui/switch.js';
 import { McpConnectDialog } from './McpConnectDialog.js';
 import { ReconciliationSettings } from './ReconciliationSettings.js';
-import { chooseKeyPair, commonFieldPairs, emptyUpload, fileFormat, formatBytes, FORM_OVERHEAD_RESERVE, isValidPairSelection, isValidTolerance, MAX_COMBINED_BYTES, MAX_FIELD_PAIRS, MAX_FILE_BYTES, MAX_KEY_PAIRS, type Pair, type ResultResponse, type Side, type SourceUpload } from './dashboard-logic.js';
+import { chooseKeyPair, commonFieldPairs, emptyUpload, estimateMultipartRequestBytes, fileFormat, formatBytes, isValidPairSelection, isValidTolerance, MAX_COMBINED_BYTES, MAX_FIELD_PAIRS, MAX_FILE_BYTES, MAX_KEY_PAIRS, type Pair, type ResultResponse, type Side, type SourceUpload } from './dashboard-logic.js';
 import { ResultsPanel } from './ResultsPanel.js';
 import { SourceCard } from './SourceCard.js';
 
@@ -49,7 +49,20 @@ function App(): ReactElement {
     && !fieldPairs.some((field) => keyPairs.some((key) => key.left === field.left || key.right === field.right));
   const effectiveFieldPairs = fieldPairs.filter((field) => !keyPairs.some((key) => key.left === field.left || key.right === field.right));
   const requestBytes = left.file && right.file
-    ? left.file.size + right.file.size + new TextEncoder().encode(left.file.name).length + new TextEncoder().encode(right.file.name).length + FORM_OVERHEAD_RESERVE
+    ? estimateMultipartRequestBytes([
+      { name: 'mode', value: 'compare' },
+      { name: 'left', value: JSON.stringify({ type: 'file', format: fileFormat(left.file.name) ?? 'csv', name: left.file.name }) },
+      { name: 'right', value: JSON.stringify({ type: 'file', format: fileFormat(right.file.name) ?? 'csv', name: right.file.name }) },
+      { name: 'keyPairs', value: JSON.stringify(keyPairs) },
+      { name: 'fieldPairs', value: JSON.stringify(effectiveFieldPairs) },
+      { name: 'trimWhitespace', value: String(trimWhitespace) },
+      { name: 'caseSensitiveKeys', value: 'true' },
+      { name: 'caseSensitiveValues', value: String(!ignoreCase) },
+      { name: 'tolerance', value: tolerance || '0' },
+    ], [
+      { name: 'fileLeft', filename: left.file.name, size: left.file.size },
+      { name: 'fileRight', filename: right.file.name, size: right.file.size },
+    ])
     : 0;
   const overBudget = requestBytes > MAX_COMBINED_BYTES;
   const bothInspected = Boolean(left.file && right.file && left.columns.length > 0 && right.columns.length > 0 && !left.busy && !right.busy);

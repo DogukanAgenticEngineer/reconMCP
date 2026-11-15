@@ -45,5 +45,5 @@
 
 ## Yerel doğrulama kanıtı
 - Son çalıştırmada strict typecheck, ESLint, production dependency audit ve production build geçti; audit yüksek riskli bilinen zafiyet bildirmedi.
-- 32/32 test geçti; testler sentetik içerik ve resmi MCP Streamable HTTP istemcisiyle tool/resource/prompt keşfi, Markdown ve structuredContent çıktısını kapsıyor.
+- 34/34 test geçti; testler sentetik içerik ve resmi MCP Streamable HTTP istemcisiyle tool/resource/prompt keşfi, güvenli Markdown/structuredContent çıktısı, saldırgan Markdown içeriklerinin etkisizleştirilmesi ve geniş field mapping'leri içeren muhafazakâr multipart boyut hesabını kapsıyor.
 - Geliştirme sunucusu ana sayfayı, `/manus-routes.json` ve değişen UI modüllerini HTTP 200 ile sundu; production/CI doğrulaması henüz yapılmadı.

@@ -37,8 +37,15 @@ function markdownCell(value: unknown, maximum = 140): string {
   let text: string;
   try { text = typeof value === 'string' ? value : JSON.stringify(value) ?? String(value); }
   catch { text = String(value); }
-  text = text.replace(/[|\\]/g, '\\$&').replace(/[\r\n\t]+/g, ' ').replace(/\s{2,}/g, ' ').trim();
-  return text.length > maximum ? `${text.slice(0, maximum - 1)}…` : text || '—';
+  text = text.replace(/[\r\n\t]+/g, ' ').replace(/\s{2,}/g, ' ').trim();
+  if (text.length > maximum) text = `${text.slice(0, maximum - 1)}…`;
+  if (!text) return '—';
+  let longestBacktickRun = 0;
+  for (const run of text.matchAll(/`+/g)) longestBacktickRun = Math.max(longestBacktickRun, run[0]?.length ?? 0);
+  const delimiter = '`'.repeat(longestBacktickRun + 1);
+  const padding = text.startsWith('`') || text.endsWith('`') ? ' ' : '';
+  const body = text.replaceAll('|', '\\|');
+  return `${delimiter}${padding}${body}${padding}${delimiter}`;
 }
 
 function groups(dataset: Dataset, pairs: FieldPair[], side: 'left' | 'right', options: KeyOptions): Map<string, DataRow[]> {

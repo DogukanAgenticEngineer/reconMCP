@@ -97,4 +97,21 @@ describe('deterministic reconciliation', () => {
     expect(csv).toContain("'=HYPERLINK");
     expect(csv).not.toContain('"=HYPERLINK');
   });
+
+  it('keeps hostile Markdown syntax in source labels and result cells inert', () => {
+    const hostileName = '![source](https://evil.invalid) <img src=x onerror=alert(1)> **A**';
+    const sourceA: Dataset = {
+      name: hostileName,
+      columns: ['id', '`value`'],
+      rows: [{ id: 'x', '`value`': '`bad` | [click](https://evil.invalid)' }],
+    };
+    const sourceB: Dataset = { name: 'B', columns: ['id', 'value'], rows: [{ id: 'x', value: 'safe' }] };
+    const result = compareDatasets(sourceA, sourceB, {
+      keyPairs: [{ left: 'id', right: 'id' }],
+      fieldPairs: [{ left: '`value`', right: 'value' }],
+    });
+
+    expect(result.markdown).toContain(`\`${hostileName}\``);
+    expect(result.markdown).toContain('`` `bad` \\| [click](https://evil.invalid) ``');
+  });
 });

@@ -2,7 +2,9 @@ import type { ComparisonPreviewRow, ComparisonStatus, ReconciliationResult, Scal
 
 export const MAX_FILE_BYTES = 4 * 1024 * 1024;
 export const MAX_COMBINED_BYTES = Math.floor(4.25 * 1024 * 1024);
-export const FORM_OVERHEAD_RESERVE = 4096;
+const FIELD_PART_OVERHEAD = 512;
+const FILE_PART_OVERHEAD = 1024;
+const FINAL_BOUNDARY_OVERHEAD = 512;
 export const ACCEPTED_FILES = '.csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 export const PREVIEW_ROW_LIMIT = 50;
 export const MAX_KEY_PAIRS = 10;
@@ -83,6 +85,16 @@ export function isValidPairSelection(pairs: Pair[], leftColumns: string[], right
 export function isValidTolerance(value: string): boolean {
   if (value === '') return true;
   return value.length <= 50 && /^\d{1,30}(?:\.\d{1,18})?$/.test(value);
+}
+
+export function estimateMultipartRequestBytes(
+  fields: Array<{ name: string; value: string }>,
+  files: Array<{ name: string; filename: string; size: number }>,
+): number {
+  const encoder = new TextEncoder();
+  const fieldBytes = fields.reduce((total, field) => total + encoder.encode(field.name).byteLength + encoder.encode(field.value).byteLength + FIELD_PART_OVERHEAD, 0);
+  const fileBytes = files.reduce((total, file) => total + Math.max(0, file.size) + encoder.encode(file.name).byteLength + (encoder.encode(file.filename).byteLength * 3) + FILE_PART_OVERHEAD, 0);
+  return fieldBytes + fileBytes + FINAL_BOUNDARY_OVERHEAD;
 }
 
 export function filteredPreview(
