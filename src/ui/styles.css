@@ -38,9 +38,6 @@ body {
 }
 
 .rt-Card,
-.rt-SelectTrigger,
-.rt-SelectContent,
-.rt-SelectItem,
 .rt-TableRoot {
   background-color: #000 !important;
   color: #fff !important;
@@ -49,16 +46,6 @@ body {
 .rt-Card {
   border: 1px solid rgba(255, 255, 255, 0.22);
   box-shadow: none;
-}
-
-.rt-SelectTrigger,
-.rt-SelectContent {
-  border-color: rgba(255, 255, 255, 0.45) !important;
-}
-
-.rt-SelectItem[data-highlighted] {
-  background: #fff !important;
-  color: #000 !important;
 }
 
 .rt-Button {
@@ -76,7 +63,7 @@ body {
 .side-label,
 .drop-secondary,
 .retention-note {
-  color: rgba(255, 255, 255, 0.65) !important;
+  color: #fff !important;
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
@@ -102,7 +89,7 @@ body {
 .drop-zone:focus-within,
 .drop-zone.is-dragging {
   border-color: #fff;
-  background: #090909;
+  background: #000;
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.45);
 }
 
@@ -129,10 +116,6 @@ body {
   gap: 14px;
   max-width: 480px;
   margin: 0 auto;
-}
-
-.match-trigger {
-  min-width: 170px;
 }
 
 .run-row {
@@ -164,7 +147,7 @@ body {
 }
 
 .run-button.rt-Button:disabled {
-  opacity: 0.5;
+  opacity: 1;
   cursor: not-allowed;
 }
 

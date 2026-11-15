@@ -225,6 +225,7 @@ function App() {
               <span>SCHEMA {result.summary.schemaIssues}</span>
             </div>
             {reportUrl && <a className="report-link" href={reportUrl} download="reconcile-report.csv">CSV</a>}
+            {result.mismatches.length > 20 && <Text as="p" size="1" className="status-line">SHOWING 20 OF {result.mismatches.length}</Text>}
             {result.mismatches.length > 0 && (
               <div className="table-wrap">
                 <Table.Root size="1" variant="surface">
