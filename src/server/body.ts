@@ -64,7 +64,7 @@ export function readMultipartBody(req: IncomingMessage): Promise<MultipartBody> 
         fail('Multipart alanı geçersiz veya sınırı aşıyor.');
         return;
       }
-      if (!['mode', 'source', 'left', 'right', 'keyPairs', 'fieldPairs', 'tolerance', 'trimWhitespace', 'caseSensitiveKeys'].includes(name)) {
+      if (!['mode', 'source', 'left', 'right', 'keyPairs', 'fieldPairs', 'tolerance', 'trimWhitespace', 'caseSensitiveKeys', 'caseSensitiveValues'].includes(name)) {
         fail('Multipart alan adı desteklenmiyor.');
         return;
       }

@@ -61,6 +61,29 @@ describe('reconciliation HTTP endpoint', () => {
     expect(preview.rowCount).toBe(1);
   });
 
+  it('compares multipart CSV files with the explicit case-insensitive text option', async () => {
+    await startServer();
+    const form = new FormData();
+    form.append('mode', 'compare');
+    form.append('left', JSON.stringify({ type: 'file', format: 'csv', name: 'left.csv' }));
+    form.append('right', JSON.stringify({ type: 'file', format: 'csv', name: 'right.csv' }));
+    form.append('keyPairs', JSON.stringify([{ left: 'id', right: 'id' }]));
+    form.append('fieldPairs', JSON.stringify([{ left: 'value', right: 'value' }]));
+    form.append('trimWhitespace', 'true');
+    form.append('caseSensitiveKeys', 'true');
+    form.append('caseSensitiveValues', 'false');
+    form.append('tolerance', '0');
+    form.append('fileLeft', new Blob(['id,value\n1,North\n'], { type: 'text/csv' }), 'left.csv');
+    form.append('fileRight', new Blob(['id,value\n1,north\n'], { type: 'text/csv' }), 'right.csv');
+    const response = await fetch(baseUrl, { method: 'POST', body: form });
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toContain('no-store');
+    const result = await response.json() as { summary: { matchedKeys: number; valueMismatches: number }; comparisonPreview: Array<{ status: string }> };
+    expect(result.summary.matchedKeys).toBe(1);
+    expect(result.summary.valueMismatches).toBe(0);
+    expect(result.comparisonPreview[0]?.status).toBe('match');
+  });
+
   it('rejects an HTTP body larger than the 4.25 MB policy', async () => {
     await startServer();
     const response = await fetch(baseUrl, {
