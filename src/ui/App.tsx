@@ -1,11 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
-import { Badge, Button, Card, Heading, Switch, Text, Theme } from '@radix-ui/themes';
-import { chooseKeyPair, commonFieldPairs, emptyUpload, fileFormat, formatBytes, FORM_OVERHEAD_RESERVE, MAX_COMBINED_BYTES, MAX_FILE_BYTES, type ResultResponse, type Side, type SourceUpload } from './dashboard-logic.js';
+import type { ReactElement } from 'react';
+import { Moon, Sun } from 'lucide-react';
+import { Badge } from '@/components/ui/badge.js';
+import { Button } from '@/components/ui/button.js';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card.js';
+import { Label } from '@/components/ui/label.js';
+import { Switch } from '@/components/ui/switch.js';
+import { McpConnectDialog } from './McpConnectDialog.js';
+import { ReconciliationSettings } from './ReconciliationSettings.js';
+import { chooseKeyPair, commonFieldPairs, emptyUpload, estimateMultipartRequestBytes, fileFormat, formatBytes, isValidPairSelection, isValidTolerance, MAX_COMBINED_BYTES, MAX_FIELD_PAIRS, MAX_FILE_BYTES, MAX_KEY_PAIRS, type Pair, type ResultResponse, type Side, type SourceUpload } from './dashboard-logic.js';
 import { ResultsPanel } from './ResultsPanel.js';
 import { SourceCard } from './SourceCard.js';
 
-type Preview = { columns: string[]; rowCount: number };
+ type Preview = { columns: string[]; rowCount: number };
 type ApiError = { error?: string };
 type Appearance = 'light' | 'dark';
 
@@ -14,12 +22,14 @@ function safeError(payload: unknown, fallback: string): string {
   return fallback;
 }
 
-function App() {
+function App(): ReactElement {
   const [appearance, setAppearance] = useState<Appearance>('light');
   const [left, setLeft] = useState<SourceUpload>(emptyUpload);
   const [right, setRight] = useState<SourceUpload>(emptyUpload);
+  const [keyPairs, setKeyPairs] = useState<Pair[]>([]);
+  const [fieldPairs, setFieldPairs] = useState<Pair[]>([]);
+  const [tolerance, setTolerance] = useState('0');
   const [working, setWorking] = useState(false);
-  const [copied, setCopied] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState<ResultResponse | null>(null);
   const [reportUrl, setReportUrl] = useState('');
@@ -33,13 +43,38 @@ function App() {
 
   const setUpload = (side: Side): Dispatch<SetStateAction<SourceUpload>> => side === 'left' ? setLeft : setRight;
   const commonPairs = useMemo(() => commonFieldPairs(left.columns, right.columns), [left.columns, right.columns]);
-  const keyPair = useMemo(() => chooseKeyPair(commonPairs), [commonPairs]);
-  const fieldPairs = useMemo(() => commonPairs.filter((pair) => pair.left !== keyPair?.left || pair.right !== keyPair?.right), [commonPairs, keyPair]);
+  const toleranceInvalid = !isValidTolerance(tolerance);
+  const keyPairsValid = isValidPairSelection(keyPairs, left.columns, right.columns, MAX_KEY_PAIRS, 1);
+  const fieldPairsValid = isValidPairSelection(fieldPairs, left.columns, right.columns, MAX_FIELD_PAIRS)
+    && !fieldPairs.some((field) => keyPairs.some((key) => key.left === field.left || key.right === field.right));
+  const effectiveFieldPairs = fieldPairs.filter((field) => !keyPairs.some((key) => key.left === field.left || key.right === field.right));
   const requestBytes = left.file && right.file
-    ? left.file.size + right.file.size + new TextEncoder().encode(left.file.name).length + new TextEncoder().encode(right.file.name).length + FORM_OVERHEAD_RESERVE
+    ? estimateMultipartRequestBytes([
+      { name: 'mode', value: 'compare' },
+      { name: 'left', value: JSON.stringify({ type: 'file', format: fileFormat(left.file.name) ?? 'csv', name: left.file.name }) },
+      { name: 'right', value: JSON.stringify({ type: 'file', format: fileFormat(right.file.name) ?? 'csv', name: right.file.name }) },
+      { name: 'keyPairs', value: JSON.stringify(keyPairs) },
+      { name: 'fieldPairs', value: JSON.stringify(effectiveFieldPairs) },
+      { name: 'trimWhitespace', value: String(trimWhitespace) },
+      { name: 'caseSensitiveKeys', value: 'true' },
+      { name: 'caseSensitiveValues', value: String(!ignoreCase) },
+      { name: 'tolerance', value: tolerance || '0' },
+    ], [
+      { name: 'fileLeft', filename: left.file.name, size: left.file.size },
+      { name: 'fileRight', filename: right.file.name, size: right.file.size },
+    ])
     : 0;
   const overBudget = requestBytes > MAX_COMBINED_BYTES;
-  const ready = Boolean(left.file && right.file && keyPair && !left.busy && !right.busy && !working && !overBudget);
+  const bothInspected = Boolean(left.file && right.file && left.columns.length > 0 && right.columns.length > 0 && !left.busy && !right.busy);
+  const ready = Boolean(bothInspected && keyPairsValid && fieldPairsValid && !toleranceInvalid && !working && !overBudget);
+  const endpoint = `${window.location.origin}/api/mcp`;
+
+  useEffect(() => {
+    const automaticKey = chooseKeyPair(commonPairs);
+    const defaults = automaticKey ? [automaticKey] : [];
+    setKeyPairs(defaults);
+    setFieldPairs(commonPairs.filter((pair) => !defaults.some((key) => key.left === pair.left || key.right === pair.right)));
+  }, [commonPairs]);
 
   useEffect(() => {
     if (!result) {
@@ -52,7 +87,7 @@ function App() {
   }, [result]);
 
   useEffect(() => {
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', appearance === 'dark' ? '#111827' : '#f5f7fa');
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', appearance === 'dark' ? '#101723' : '#f6f8fb');
   }, [appearance]);
 
   const invalidateRun = (): void => {
@@ -62,12 +97,22 @@ function App() {
     setWorking(false);
   };
 
+  const clearResult = (): void => {
+    if (runController.current) {
+      runRequestId.current += 1;
+      runController.current.abort();
+      runController.current = null;
+    }
+    setWorking(false);
+    setResult(null);
+    setError('');
+  };
+
   const inspectFile = async (side: Side, file: File): Promise<void> => {
     const update = setUpload(side);
     const requestId = ++requestIds.current[side];
     invalidateRun();
-    setError('');
-    setResult(null);
+    clearResult();
     const format = fileFormat(file.name);
     if (!format) {
       update({ ...emptyUpload(), error: 'Choose a CSV or XLSX file.' });
@@ -108,23 +153,22 @@ function App() {
     requestIds.current[side] += 1;
     update({ ...emptyUpload(), error: message });
     invalidateRun();
-    setResult(null);
-    setError('');
+    clearResult();
   };
 
-  const copyMcp = async (): Promise<void> => {
-    try {
-      if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable');
-      await navigator.clipboard.writeText(`${window.location.origin}/api/mcp`);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1800);
-    } catch {
-      setError('Clipboard access is unavailable in this browser.');
-    }
+  const updateKeyPairs = (next: Pair[]): void => {
+    setKeyPairs(next);
+    setFieldPairs((current) => current.filter((field) => !next.some((key) => key.left === field.left || key.right === field.right)));
+    clearResult();
+  };
+
+  const updateFieldPairs = (next: Pair[]): void => {
+    setFieldPairs(next);
+    clearResult();
   };
 
   const run = async (): Promise<void> => {
-    if (!left.file || !right.file || !keyPair || overBudget) return;
+    if (!ready || !left.file || !right.file) return;
     const leftFormat = fileFormat(left.file.name);
     const rightFormat = fileFormat(right.file.name);
     if (!leftFormat || !rightFormat) return;
@@ -139,12 +183,12 @@ function App() {
     form.append('mode', 'compare');
     form.append('left', JSON.stringify({ type: 'file', format: leftFormat, name: left.file.name }));
     form.append('right', JSON.stringify({ type: 'file', format: rightFormat, name: right.file.name }));
-    form.append('keyPairs', JSON.stringify([keyPair]));
-    form.append('fieldPairs', JSON.stringify(fieldPairs));
+    form.append('keyPairs', JSON.stringify(keyPairs));
+    form.append('fieldPairs', JSON.stringify(effectiveFieldPairs));
     form.append('trimWhitespace', String(trimWhitespace));
     form.append('caseSensitiveKeys', 'true');
     form.append('caseSensitiveValues', String(!ignoreCase));
-    form.append('tolerance', '0');
+    form.append('tolerance', tolerance || '0');
     form.append('fileLeft', left.file, left.file.name);
     form.append('fileRight', right.file, right.file.name);
     try {
@@ -152,7 +196,7 @@ function App() {
       const payload = await response.json() as ResultResponse & ApiError;
       if (!response.ok) throw new Error(safeError(payload, 'Reconciliation failed.'));
       if (runRequestId.current !== requestId) return;
-      setResult(payload as ResultResponse);
+      setResult(payload);
       setTab('comparison');
     } catch (cause) {
       if (runRequestId.current !== requestId) return;
@@ -170,23 +214,29 @@ function App() {
     setUpload(side)((current) => ({ ...current, dragging }));
   };
 
+  const updateSetting = (setter: (value: boolean) => void, value: boolean): void => {
+    setter(value);
+    clearResult();
+  };
+
   return (
-    <Theme appearance={appearance} accentColor="blue" grayColor="gray" radius="medium" scaling="100%">
-      <div className="app-shell">
+    <div className={`theme-root ${appearance === 'dark' ? 'dark' : ''}`}>
+      <div className="app-shell dashboard-page">
         <div className="dashboard-container">
           <header className="topbar">
             <div className="brand-block">
-              <Heading as="h1" size="5" className="wordmark">Reconcile<span> MCP</span></Heading>
-              <Text as="p" size="1" color="gray" className="brand-caption">Data reconciliation workspace</Text>
+              <div className="brand-kicker"><span className="brand-mark" aria-hidden="true" /> PRIVATE · DETERMINISTIC</div>
+              <h1 className="wordmark">Reconcile <span>MCP</span></h1>
+              <p className="brand-caption">Data reconciliation workspace</p>
             </div>
             <div className="topbar-actions">
               <div className="theme-control">
-                <Text as="label" htmlFor="theme-toggle" size="1">Dark</Text>
+                <Sun aria-hidden="true" className="theme-icon" />
+                <Label htmlFor="theme-toggle" className="sr-only">Dark theme</Label>
                 <Switch id="theme-toggle" checked={appearance === 'dark'} onCheckedChange={(checked) => setAppearance(checked ? 'dark' : 'light')} aria-label="Toggle dark theme" />
+                <Moon aria-hidden="true" className="theme-icon" />
               </div>
-              <Button type="button" variant="outline" onClick={() => void copyMcp()} aria-label="Copy MCP endpoint URL">
-                {copied ? 'Copied' : 'CONNECT MCP'}
-              </Button>
+              <McpConnectDialog endpoint={endpoint} />
             </div>
           </header>
 
@@ -196,67 +246,85 @@ function App() {
               <SourceCard side="right" upload={right} onInspect={inspectFile} onDraggingChange={updateDragging} onSelectError={onSelectError} />
             </section>
 
-            {keyPair && left.columns.length > 0 && right.columns.length > 0 && (
-              <section className="mapping-strip" aria-label="Automatic field mapping">
-                <Text size="1" color="gray">MATCH KEY</Text>
-                <Badge color="blue" variant="soft">{keyPair.left}{keyPair.left === keyPair.right ? '' : ` → ${keyPair.right}`}</Badge>
-                <Text size="1" color="gray">{fieldPairs.length} comparable fields</Text>
-              </section>
-            )}
-            {left.columns.length > 0 && right.columns.length > 0 && !keyPair && (
-              <Text as="p" role="status" className="inline-message">No common column names. RUN is unavailable.</Text>
+            {bothInspected && <Card className="mapping-card">
+              <CardHeader className="mapping-header">
+                <div>
+                  <CardTitle>Matching logic</CardTitle>
+                  <CardDescription>Set record keys and the values to compare. Defaults are inferred from shared headers.</CardDescription>
+                </div>
+                <Badge variant={keyPairsValid && fieldPairsValid && !toleranceInvalid ? 'secondary' : 'destructive'}>{keyPairs.length} key{keyPairs.length === 1 ? '' : 's'}</Badge>
+              </CardHeader>
+              <CardContent>
+                <ReconciliationSettings
+                  leftColumns={left.columns}
+                  rightColumns={right.columns}
+                  keyPairs={keyPairs}
+                  fieldPairs={fieldPairs}
+                  tolerance={tolerance}
+                  toleranceInvalid={toleranceInvalid}
+                  onKeyPairsChange={updateKeyPairs}
+                  onFieldPairsChange={updateFieldPairs}
+                  onToleranceChange={(value) => { setTolerance(value); clearResult(); }}
+                />
+                {(!keyPairsValid || !fieldPairsValid) && <p className="mapping-error" role="alert">Choose unique fields that exist in both sources. Key and comparison fields cannot overlap.</p>}
+              </CardContent>
+            </Card>}
+            {left.columns.length > 0 && right.columns.length > 0 && commonPairs.length === 0 && (
+              <p role="status" className="inline-message">No matching column names were found. Add the key and value mappings manually.</p>
             )}
 
             <section className="dashboard-workspace" aria-label="Reconciliation workspace">
               <ResultsPanel result={result} tab={tab} onTabChange={setTab} onlyDifferences={onlyDifferences} />
-              <aside className="action-column" aria-label="Run and settings">
-                <Card className="action-card" size="3">
-                  <Text as="div" size="3" weight="bold">Run</Text>
-                  <Text as="p" size="1" color="gray" className="action-copy">Compare the selected sources using the automatic key and mapped fields.</Text>
-                  <Button type="button" className="run-button" onClick={() => void run()} disabled={!ready} aria-busy={working}>
-                    {working ? 'Comparing…' : 'RUN'}
-                  </Button>
-                  {left.file && right.file && <Text as="div" size="1" color={overBudget ? 'red' : 'gray'} className="budget-note">Request budget: {formatBytes(requestBytes)} / 4.25 MB</Text>}
-                  {overBudget && <Text as="p" role="alert" size="1" color="red">Combined files exceed the request limit.</Text>}
-                  {error && <Text as="p" role="alert" className="error-message">{error}</Text>}
-                  {result && reportUrl && <a className="download-button" href={reportUrl} download="reconcile-report.csv">Download CSV report</a>}
-                  <div className="endpoint-info">
-                    <Text as="div" size="1" weight="medium">MCP endpoint</Text>
-                    <code>{window.location.origin}/api/mcp</code>
-                    <Text as="div" size="1" color="gray" aria-live="polite">{copied ? 'Endpoint copied to clipboard.' : 'Connect from an MCP-compatible client.'}</Text>
-                  </div>
+              <aside className="action-column" aria-label="Run and comparison options">
+                <Card className="action-card">
+                  <CardHeader className="action-card-header">
+                    <CardTitle>Run reconciliation</CardTitle>
+                    <CardDescription>Compare the selected files using these matching rules.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="action-card-content">
+                    <Button type="button" className="run-button" onClick={() => void run()} disabled={!ready} aria-busy={working}>
+                      {working ? <><span className="loading-spinner button-spinner" aria-hidden="true" /> Comparing…</> : 'RUN'}
+                    </Button>
+                    {left.file && right.file && <p className={`budget-note ${overBudget ? 'error-message' : ''}`}>Request budget: {formatBytes(requestBytes)} / 4.25 MB</p>}
+                    {overBudget && <p role="alert" className="error-message">Combined files exceed the request limit.</p>}
+                    {!keyPairsValid && bothInspected && <p className="action-hint">Select at least one valid key pair to enable RUN.</p>}
+                    {error && <p role="alert" className="error-message">{error}</p>}
+                    {result && reportUrl && <a className="download-button" href={reportUrl} download="reconcile-report.csv">Download complete CSV report</a>}
+                  </CardContent>
                 </Card>
 
-                <Card className="settings-card" size="3">
-                  <Text as="div" size="3" weight="bold">Options</Text>
-                  <label className="setting-row" htmlFor="ignore-case">
-                    <span><Text as="div" size="2" weight="medium">Ignore case (text)</Text><Text as="div" size="1" color="gray">Text values only</Text></span>
-                    <Switch id="ignore-case" checked={ignoreCase} onCheckedChange={setIgnoreCase} aria-label="Ignore case in text values" />
-                  </label>
-                  <label className="setting-row" htmlFor="trim-whitespace">
-                    <span><Text as="div" size="2" weight="medium">Trim whitespace</Text><Text as="div" size="1" color="gray">Leading and trailing</Text></span>
-                    <Switch id="trim-whitespace" checked={trimWhitespace} onCheckedChange={setTrimWhitespace} aria-label="Trim leading and trailing whitespace" />
-                  </label>
-                  <label className="setting-row" htmlFor="only-differences">
-                    <span><Text as="div" size="2" weight="medium">Show only differences</Text><Text as="div" size="1" color="gray">Filter comparison table</Text></span>
-                    <Switch id="only-differences" checked={onlyDifferences} onCheckedChange={setOnlyDifferences} aria-label="Show only differences in the comparison table" />
-                  </label>
+                <Card className="settings-card">
+                  <CardHeader className="settings-heading"><CardTitle>Options</CardTitle><CardDescription>Text matching behavior</CardDescription></CardHeader>
+                  <CardContent className="settings-content">
+                    <div className="setting-row">
+                      <div><Label htmlFor="ignore-case">Ignore case</Label><p>Text values only</p></div>
+                      <Switch id="ignore-case" checked={ignoreCase} onCheckedChange={(checked) => updateSetting(setIgnoreCase, checked)} aria-label="Ignore case in text values" />
+                    </div>
+                    <div className="setting-row">
+                      <div><Label htmlFor="trim-whitespace">Trim whitespace</Label><p>Leading and trailing spaces</p></div>
+                      <Switch id="trim-whitespace" checked={trimWhitespace} onCheckedChange={(checked) => updateSetting(setTrimWhitespace, checked)} aria-label="Trim leading and trailing whitespace" />
+                    </div>
+                    <div className="setting-row">
+                      <div><Label htmlFor="only-differences">Show only differences</Label><p>Hide matching key groups</p></div>
+                      <Switch id="only-differences" checked={onlyDifferences} onCheckedChange={setOnlyDifferences} aria-label="Show only differences in the comparison table" />
+                    </div>
+                  </CardContent>
                 </Card>
 
-                <Card className="privacy-card" size="2">
-                  <Text as="div" size="1" weight="bold">No app-level data storage</Text>
-                  <Text as="p" size="1" color="gray">Files and results are processed for the request only. Hosting-provider infrastructure logs are outside the app’s control.</Text>
+                <Card className="privacy-card">
+                  <CardHeader className="privacy-heading"><Badge variant="outline">Privacy</Badge><CardTitle>No app-level storage</CardTitle></CardHeader>
+                  <CardContent><p>Files and results are processed for the request only. Hosting-provider infrastructure logs are outside the app’s control.</p></CardContent>
                 </Card>
               </aside>
             </section>
           </main>
           <footer className="page-footer">
-            <Text size="1" color="gray">{MAX_FILE_BYTES / 1024 / 1024} MB per file · 10,000 rows per source · no persistent app storage</Text>
-            <Text size="1" color="gray">{MAX_COMBINED_BYTES / 1024 / 1024} MB request limit</Text>
+            <span>{MAX_FILE_BYTES / 1024 / 1024} MB per file · 10,000 rows per source · in-memory processing</span>
+            <span>{MAX_COMBINED_BYTES / 1024 / 1024} MB request limit</span>
           </footer>
         </div>
       </div>
-    </Theme>
+    </div>
   );
 }
 

@@ -1,6 +1,15 @@
-import { Badge, Card, Flex, Progress, Table, Tabs, Text } from '@radix-ui/themes';
-import type { ComparisonPreviewRow, ReconciliationResult } from '../core/types.js';
-import { displayScalar, filteredPreview, matchedRate, shorten } from './dashboard-logic.js';
+import { useEffect, useMemo, useState } from 'react';
+import type { ReactElement } from 'react';
+import { Search } from 'lucide-react';
+import { Badge } from '@/components/ui/badge.js';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card.js';
+import { Input } from '@/components/ui/input.js';
+import { Progress } from '@/components/ui/progress.js';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select.js';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table.js';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs.js';
+import type { ComparisonPreviewRow, ComparisonStatus, ReconciliationResult, Scalar } from '../core/types.js';
+import { displayScalar, filteredPreview, matchedRate, shorten, type PreviewStatusFilter } from './dashboard-logic.js';
 
 interface ResultsPanelProps {
   result: ReconciliationResult | null;
@@ -9,118 +18,163 @@ interface ResultsPanelProps {
   onlyDifferences: boolean;
 }
 
-const STATUS: Record<ComparisonPreviewRow['status'], { label: string; color: 'green' | 'red' | 'amber' | 'orange' | 'blue' }> = {
-  match: { label: 'Match', color: 'green' },
-  mismatch: { label: 'Mismatch', color: 'red' },
-  only_left: { label: 'Only in A', color: 'amber' },
-  only_right: { label: 'Only in B', color: 'blue' },
-  duplicate: { label: 'Duplicate', color: 'orange' },
+const STATUS: Record<ComparisonStatus, { label: string; className: string }> = {
+  match: { label: 'Match', className: 'status-match' },
+  mismatch: { label: 'Mismatch', className: 'status-mismatch' },
+  only_left: { label: 'Only in A', className: 'status-left' },
+  only_right: { label: 'Only in B', className: 'status-right' },
+  duplicate: { label: 'Duplicate', className: 'status-duplicate' },
 };
 
-function KeyCell({ value }: { value: string }) {
-  return <span className="cell-ellipsis" title={value} aria-label={value}>{shorten(value, 160)}</span>;
+interface DifferenceRow {
+  id: string;
+  status: ComparisonStatus | 'schema';
+  key: string;
+  field: string;
+  left: string;
+  right: string;
 }
 
-function ValueCell({ value }: { value: string }) {
-  return <span className="cell-ellipsis" title={value} aria-label={value}>{shorten(value, 180)}</span>;
+function keyText(value: string): string {
+  return shorten(value, 160);
 }
 
-function EmptyState({ children }: { children: string }) {
-  return <div className="empty-state"><Text size="2" color="gray">{children}</Text></div>;
+function searchableDifferences(result: ReconciliationResult): DifferenceRow[] {
+  const rows: DifferenceRow[] = [
+    ...result.mismatches.map((item, index) => ({
+      id: `mismatch-${index}`,
+      status: 'mismatch' as const,
+      key: JSON.stringify(item.key),
+      field: item.leftField === item.rightField ? item.leftField : `${item.leftField} → ${item.rightField}`,
+      left: displayScalar(item.leftValue),
+      right: displayScalar(item.rightValue),
+    })),
+    ...result.missing.onlyOnLeft.map((item, index) => ({
+      id: `missing-a-${index}`,
+      status: 'only_left' as const,
+      key: shorten(JSON.stringify(item), 240),
+      field: 'Record',
+      left: shorten(JSON.stringify(item), 180),
+      right: '—',
+    })),
+    ...result.missing.onlyOnRight.map((item, index) => ({
+      id: `missing-b-${index}`,
+      status: 'only_right' as const,
+      key: shorten(JSON.stringify(item), 240),
+      field: 'Record',
+      left: '—',
+      right: shorten(JSON.stringify(item), 180),
+    })),
+    ...result.duplicates.left.map((group, index) => ({
+      id: `duplicate-a-${index}`,
+      status: 'duplicate' as const,
+      key: JSON.stringify(group.key),
+      field: 'Duplicate key',
+      left: `${group.count} rows`,
+      right: '—',
+    })),
+    ...result.duplicates.right.map((group, index) => ({
+      id: `duplicate-b-${index}`,
+      status: 'duplicate' as const,
+      key: JSON.stringify(group.key),
+      field: 'Duplicate key',
+      left: '—',
+      right: `${group.count} rows`,
+    })),
+    ...result.schema.onlyOnLeft.map((field, index) => ({
+      id: `schema-a-${index}`,
+      status: 'schema' as const,
+      key: field,
+      field: 'Schema field',
+      left: 'Present',
+      right: '—',
+    })),
+    ...result.schema.onlyOnRight.map((field, index) => ({
+      id: `schema-b-${index}`,
+      status: 'schema' as const,
+      key: field,
+      field: 'Schema field',
+      left: '—',
+      right: 'Present',
+    })),
+  ];
+  return rows;
 }
 
-function ComparisonTable({ rows, previewTruncated, onlyDifferences }: { rows: ComparisonPreviewRow[]; previewTruncated: boolean; onlyDifferences: boolean }) {
-  if (rows.length === 0) return <EmptyState>{onlyDifferences ? 'No differences found. Turn off the filter to see matching records.' : 'No key groups to show.'}</EmptyState>;
+function ValueCell({ value }: { value: Scalar | string }): ReactElement {
+  const text = typeof value === 'string' ? value : displayScalar(value);
+  return <span className="cell-ellipsis" title={text}>{shorten(text, 180)}</span>;
+}
+
+function EmptyState({ children }: { children: string }): ReactElement {
+  return <div className="empty-state"><p>{children}</p></div>;
+}
+
+function ComparisonTable({ rows, previewTruncated, onlyDifferences }: { rows: ComparisonPreviewRow[]; previewTruncated: boolean; onlyDifferences: boolean }): ReactElement {
+  if (rows.length === 0) return <EmptyState>{onlyDifferences ? 'No differences found. Turn off the filter to show matching records.' : 'No key groups match these filters.'}</EmptyState>;
   return (
     <>
-      {previewTruncated && <Text as="p" size="1" color="gray" className="table-note">Showing the first 50 key groups. The CSV report contains all differences.</Text>}
+      {previewTruncated && <p className="table-note">Showing up to 50 key groups. The downloaded CSV report contains all differences.</p>}
       <div className="table-wrap">
-        <Table.Root size="2" variant="surface" aria-label="Comparison preview">
-          <Table.Header><Table.Row>
-            <Table.ColumnHeaderCell>Key</Table.ColumnHeaderCell>
-            <Table.ColumnHeaderCell>Status</Table.ColumnHeaderCell>
-            <Table.ColumnHeaderCell align="right">Rows A</Table.ColumnHeaderCell>
-            <Table.ColumnHeaderCell align="right">Rows B</Table.ColumnHeaderCell>
-            <Table.ColumnHeaderCell align="right">Different fields</Table.ColumnHeaderCell>
-          </Table.Row></Table.Header>
-          <Table.Body>
+        <Table aria-label="Comparison preview">
+          <TableHeader><TableRow>
+            <TableHead>Key</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead className="numeric-cell">Rows A</TableHead>
+            <TableHead className="numeric-cell">Rows B</TableHead>
+            <TableHead className="numeric-cell">Different fields</TableHead>
+          </TableRow></TableHeader>
+          <TableBody>
             {rows.map((row, index) => {
               const status = STATUS[row.status];
-              return <Table.Row key={`${row.key}-${index}`}>
-                <Table.Cell><KeyCell value={row.key} /></Table.Cell>
-                <Table.Cell><Badge color={status.color} variant="soft">{status.label}</Badge></Table.Cell>
-                <Table.Cell align="right">{row.leftRows}</Table.Cell>
-                <Table.Cell align="right">{row.rightRows}</Table.Cell>
-                <Table.Cell align="right">{row.mismatchFields || '—'}</Table.Cell>
-              </Table.Row>;
+              return <TableRow key={`${row.key}-${index}`}>
+                <TableCell><span className="cell-ellipsis" title={row.key}>{keyText(row.key)}</span></TableCell>
+                <TableCell><Badge variant="outline" className={`status-badge ${status.className}`}>{status.label}</Badge></TableCell>
+                <TableCell className="numeric-cell">{row.leftRows.toLocaleString()}</TableCell>
+                <TableCell className="numeric-cell">{row.rightRows.toLocaleString()}</TableCell>
+                <TableCell className="numeric-cell">{row.mismatchFields || '—'}</TableCell>
+              </TableRow>;
             })}
-          </Table.Body>
-        </Table.Root>
+          </TableBody>
+        </Table>
       </div>
     </>
   );
 }
 
-function DifferenceTable({ result }: { result: ReconciliationResult }) {
-  const visibleMismatchLimit = 50;
-  const mismatches = result.mismatches.slice(0, visibleMismatchLimit);
-  const duplicates = [
-    ...result.duplicates.left.map((group) => ({ side: 'A', key: JSON.stringify(group.key), count: group.count })),
-    ...result.duplicates.right.map((group) => ({ side: 'B', key: JSON.stringify(group.key), count: group.count })),
-  ].slice(0, visibleMismatchLimit);
-  const schemaRows = [
-    ...result.schema.onlyOnLeft.map((field) => ({ side: 'A', field })),
-    ...result.schema.onlyOnRight.map((field) => ({ side: 'B', field })),
-  ];
-  const total = result.mismatches.length + duplicates.length + schemaRows.length;
-  if (total === 0) return <EmptyState>No value, duplicate or schema differences.</EmptyState>;
-
+function DifferenceTable({ rows, truncated }: { rows: DifferenceRow[]; truncated: boolean }): ReactElement {
+  if (rows.length === 0) return <EmptyState>No differences match this search.</EmptyState>;
   return (
     <>
-      {(result.mismatches.length > visibleMismatchLimit || result.duplicates.left.length + result.duplicates.right.length > visibleMismatchLimit) && (
-        <Text as="p" size="1" color="gray" className="table-note">This view is limited to 50 entries per category. The CSV report contains all differences.</Text>
-      )}
+      {truncated && <p className="table-note">Showing the first 100 matching details. Download CSV for the complete report.</p>}
       <div className="table-wrap">
-        <Table.Root size="2" variant="surface" aria-label="Difference details">
-          <Table.Header><Table.Row>
-            <Table.ColumnHeaderCell>Key / field</Table.ColumnHeaderCell>
-            <Table.ColumnHeaderCell>Difference</Table.ColumnHeaderCell>
-            <Table.ColumnHeaderCell>Source A</Table.ColumnHeaderCell>
-            <Table.ColumnHeaderCell>Source B</Table.ColumnHeaderCell>
-          </Table.Row></Table.Header>
-          <Table.Body>
-            {mismatches.map((item, index) => <Table.Row key={`mismatch-${index}`}>
-              <Table.Cell><KeyCell value={JSON.stringify(item.key)} /></Table.Cell>
-              <Table.Cell>{item.leftField === item.rightField ? item.leftField : `${item.leftField} → ${item.rightField}`}</Table.Cell>
-              <Table.Cell><ValueCell value={displayScalar(item.leftValue)} /></Table.Cell>
-              <Table.Cell><ValueCell value={displayScalar(item.rightValue)} /></Table.Cell>
-            </Table.Row>)}
-            {duplicates.map((item, index) => <Table.Row key={`duplicate-${item.side}-${index}`}>
-              <Table.Cell><KeyCell value={item.key} /></Table.Cell>
-              <Table.Cell><Badge color="orange" variant="soft">Duplicate</Badge></Table.Cell>
-              <Table.Cell>{item.side === 'A' ? `${item.count} rows` : '—'}</Table.Cell>
-              <Table.Cell>{item.side === 'B' ? `${item.count} rows` : '—'}</Table.Cell>
-            </Table.Row>)}
-            {schemaRows.map((item, index) => <Table.Row key={`schema-${item.side}-${index}`}>
-              <Table.Cell><KeyCell value={item.field} /></Table.Cell>
-              <Table.Cell><Badge color="blue" variant="soft">Schema</Badge></Table.Cell>
-              <Table.Cell>{item.side === 'A' ? 'Present' : '—'}</Table.Cell>
-              <Table.Cell>{item.side === 'B' ? 'Present' : '—'}</Table.Cell>
-            </Table.Row>)}
-          </Table.Body>
-        </Table.Root>
+        <Table aria-label="Difference details">
+          <TableHeader><TableRow>
+            <TableHead>Key / record</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead>Field</TableHead>
+            <TableHead>Source A</TableHead>
+            <TableHead>Source B</TableHead>
+          </TableRow></TableHeader>
+          <TableBody>
+            {rows.map((row) => {
+              const status = row.status === 'schema' ? { label: 'Schema', className: 'status-schema' } : STATUS[row.status];
+              return <TableRow key={row.id}>
+                <TableCell><span className="cell-ellipsis" title={row.key}>{keyText(row.key)}</span></TableCell>
+                <TableCell><Badge variant="outline" className={`status-badge ${status.className}`}>{status.label}</Badge></TableCell>
+                <TableCell><ValueCell value={row.field} /></TableCell>
+                <TableCell><ValueCell value={row.left} /></TableCell>
+                <TableCell><ValueCell value={row.right} /></TableCell>
+              </TableRow>;
+            })}
+          </TableBody>
+        </Table>
       </div>
-      {(result.summary.missingOnLeft > 0 || result.summary.missingOnRight > 0) && (
-        <div className="missing-note">
-          <Text size="2" weight="medium">Missing records are listed in Comparison.</Text>
-          <Text size="1" color="gray">Only in A: {result.summary.missingOnRight.toLocaleString()} · Only in B: {result.summary.missingOnLeft.toLocaleString()}</Text>
-        </div>
-      )}
     </>
   );
 }
 
-function Summary({ result }: { result: ReconciliationResult }) {
+function Summary({ result }: { result: ReconciliationResult }): ReactElement {
   const { summary } = result;
   const metrics = [
     { label: 'Exact matches', value: summary.matchedRows, tone: 'good' },
@@ -133,60 +187,99 @@ function Summary({ result }: { result: ReconciliationResult }) {
   ];
   const rate = matchedRate(result);
   return (
-    <>
+    <div className="summary-content">
       <div className="metric-grid">
-        {metrics.map((metric) => <Card key={metric.label} className={`metric-card metric-${metric.tone}`} size="2">
-          <Text as="div" size="1" color="gray">{metric.label}</Text>
-          <Text as="div" size="6" weight="bold" className="metric-value">{metric.value.toLocaleString()}</Text>
+        {metrics.map((metric, index) => <Card key={metric.label} className={`metric-card metric-${metric.tone}`} style={{ animationDelay: `${index * 45}ms` }}>
+          <CardHeader className="metric-header"><CardDescription>{metric.label}</CardDescription></CardHeader>
+          <CardContent className="metric-content"><div className="metric-value">{metric.value.toLocaleString()}</div></CardContent>
         </Card>)}
       </div>
-      <Card className="rate-card" size="3">
-        <Flex justify="between" align="center" gap="3" wrap="wrap">
-          <div>
-            <Text as="div" weight="medium">Exact match rate</Text>
-            <Text as="div" size="1" color="gray">Among shared unique keys, excluding duplicate keys</Text>
-          </div>
-          <Text as="div" size="4" weight="bold">{summary.matchedKeys === 0 ? '—' : `${rate.toFixed(1)}%`}</Text>
-        </Flex>
-        <Progress className="match-progress" value={rate} aria-label="Exact match rate among shared unique keys" />
+      <Card className="rate-card">
+        <CardHeader className="rate-header">
+          <CardTitle>Exact match rate</CardTitle>
+          <CardDescription>Among shared unique keys, excluding duplicate keys</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="rate-line"><strong>{summary.matchedKeys === 0 ? '—' : `${rate.toFixed(1)}%`}</strong><span>{summary.matchedRows.toLocaleString()} of {summary.matchedKeys.toLocaleString()} unique key groups</span></div>
+          <Progress className="match-progress" value={rate} aria-label="Exact match rate among shared unique keys" />
+        </CardContent>
       </Card>
       <div className="source-count-line">
-        <Text size="1" color="gray">{summary.leftSource}: {summary.leftRows.toLocaleString()} rows</Text>
-        <Text size="1" color="gray">{summary.rightSource}: {summary.rightRows.toLocaleString()} rows</Text>
+        <span>{summary.leftSource}: {summary.leftRows.toLocaleString()} rows</span>
+        <span>{summary.rightSource}: {summary.rightRows.toLocaleString()} rows</span>
       </div>
-    </>
+    </div>
   );
 }
 
-export function ResultsPanel({ result, tab, onTabChange, onlyDifferences }: ResultsPanelProps) {
-  const preview = result ? filteredPreview(result.comparisonPreview, onlyDifferences) : [];
+export function ResultsPanel({ result, tab, onTabChange, onlyDifferences }: ResultsPanelProps): ReactElement {
+  const [query, setQuery] = useState('');
+  const [status, setStatus] = useState<PreviewStatusFilter>('all');
+  useEffect(() => { setQuery(''); setStatus('all'); }, [result]);
+  const previewSearchText = useMemo(() => {
+    const index = new Map<string, string>();
+    if (!result) return index;
+    const visibleKeys = new Set(result.comparisonPreview.map((row) => row.key));
+    for (const mismatch of result.mismatches) {
+      const fullKey = JSON.stringify(mismatch.key);
+      const key = shorten(fullKey, 240);
+      if (!visibleKeys.has(key)) continue;
+      const fields = index.get(key) ?? '';
+      index.set(key, `${fields} ${mismatch.leftField} ${mismatch.rightField} ${displayScalar(mismatch.leftValue)} ${displayScalar(mismatch.rightValue)}`);
+    }
+    return index;
+  }, [result]);
+  const preview = useMemo(() => result ? filteredPreview(result.comparisonPreview, onlyDifferences, query, status, previewSearchText) : [], [result, onlyDifferences, query, status, previewSearchText]);
+  const allDifferenceRows = useMemo(() => result ? searchableDifferences(result) : [], [result]);
+  const matchingDifferences = useMemo(() => {
+    const normalized = query.trim().toLocaleLowerCase('en-US');
+    return allDifferenceRows.filter((row) => !normalized || `${row.key} ${row.field} ${row.left} ${row.right}`.toLocaleLowerCase('en-US').includes(normalized));
+  }, [allDifferenceRows, query]);
+  const visibleDifferences = matchingDifferences.slice(0, 100);
+  const hasSearchControls = Boolean(result) && (tab === 'comparison' || tab === 'differences');
+
   return (
-    <Card className="results-card" size="3">
-      <div className="results-heading">
+    <Card className="results-card">
+      <CardHeader className="results-heading">
         <div>
-          <Text as="div" size="4" weight="bold">Results</Text>
-          <Text as="div" size="1" color="gray">{result ? `${result.summary.leftRows.toLocaleString()} vs ${result.summary.rightRows.toLocaleString()} rows` : 'Run a comparison to see results'}</Text>
+          <CardTitle>Results</CardTitle>
+          <CardDescription>{result ? `${result.summary.leftRows.toLocaleString()} vs ${result.summary.rightRows.toLocaleString()} rows` : 'Run a comparison to see results'}</CardDescription>
         </div>
-      </div>
-      <Tabs.Root value={tab} onValueChange={onTabChange} aria-label="Reconciliation results">
-        <Tabs.List className="result-tabs">
-          <Tabs.Trigger value="comparison">Comparison</Tabs.Trigger>
-          <Tabs.Trigger value="differences">Differences</Tabs.Trigger>
-          <Tabs.Trigger value="summary">Summary</Tabs.Trigger>
-        </Tabs.List>
-        <Tabs.Content value="comparison" className="tab-content">
-          {!result ? <EmptyState>Choose both source files, then run reconciliation.</EmptyState> : <>
-            <div className="filter-note"><Text size="1" color="gray">{onlyDifferences ? 'Showing differences only' : 'Showing all key groups'}</Text></div>
-            <ComparisonTable rows={preview} previewTruncated={result.previewTruncated} onlyDifferences={onlyDifferences} />
-          </>}
-        </Tabs.Content>
-        <Tabs.Content value="differences" className="tab-content">
-          {!result ? <EmptyState>No result yet.</EmptyState> : <DifferenceTable result={result} />}
-        </Tabs.Content>
-        <Tabs.Content value="summary" className="tab-content">
-          {!result ? <EmptyState>No result yet.</EmptyState> : <Summary result={result} />}
-        </Tabs.Content>
-      </Tabs.Root>
+        {hasSearchControls && <div className="result-filters">
+          <div className="search-wrap"><Search aria-hidden="true" /><Input value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder="Search keys, fields, values…" aria-label="Search comparison results" /></div>
+          {tab === 'comparison' && <Select value={status} onValueChange={(value) => setStatus(value as PreviewStatusFilter)}>
+            <SelectTrigger className="status-filter" aria-label="Filter comparison status"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All statuses</SelectItem>
+              {Object.entries(STATUS).map(([key, value]) => <SelectItem value={key} key={key}>{value.label}</SelectItem>)}
+            </SelectContent>
+          </Select>}
+        </div>}
+      </CardHeader>
+      <CardContent className="results-content">
+        <Tabs value={tab} onValueChange={onTabChange} aria-label="Reconciliation results">
+          <TabsList className="result-tabs" variant="line">
+            <TabsTrigger value="comparison">Comparison</TabsTrigger>
+            <TabsTrigger value="differences">Differences</TabsTrigger>
+            <TabsTrigger value="summary">Summary</TabsTrigger>
+          </TabsList>
+          <TabsContent value="comparison" className="tab-content">
+            {!result ? <EmptyState>Choose both source files, then run reconciliation.</EmptyState> : <>
+              <p className="filter-note" aria-live="polite">{onlyDifferences ? 'Differences only · ' : ''}{preview.length} of {result.comparisonPreview.length} key groups shown</p>
+              <ComparisonTable rows={preview} previewTruncated={result.previewTruncated} onlyDifferences={onlyDifferences} />
+            </>}
+          </TabsContent>
+          <TabsContent value="differences" className="tab-content">
+            {!result ? <EmptyState>No result yet.</EmptyState> : <>
+              <p className="filter-note" aria-live="polite">{visibleDifferences.length} of {matchingDifferences.length} matching difference details</p>
+              <DifferenceTable rows={visibleDifferences} truncated={matchingDifferences.length > visibleDifferences.length} />
+            </>}
+          </TabsContent>
+          <TabsContent value="summary" className="tab-content">
+            {!result ? <EmptyState>No result yet.</EmptyState> : <Summary result={result} />}
+          </TabsContent>
+        </Tabs>
+      </CardContent>
     </Card>
   );
 }

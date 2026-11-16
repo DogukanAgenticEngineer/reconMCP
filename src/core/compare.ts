@@ -32,6 +32,22 @@ function displayKey(key: Record<string, Scalar>): string {
   return text.length > DISPLAY_KEY_LIMIT ? `${text.slice(0, DISPLAY_KEY_LIMIT - 1)}…` : text;
 }
 
+function markdownCell(value: unknown, maximum = 140): string {
+  if (value === undefined) return '—';
+  let text: string;
+  try { text = typeof value === 'string' ? value : JSON.stringify(value) ?? String(value); }
+  catch { text = String(value); }
+  text = text.replace(/[\r\n\t]+/g, ' ').replace(/\s{2,}/g, ' ').trim();
+  if (text.length > maximum) text = `${text.slice(0, maximum - 1)}…`;
+  if (!text) return '—';
+  let longestBacktickRun = 0;
+  for (const run of text.matchAll(/`+/g)) longestBacktickRun = Math.max(longestBacktickRun, run[0]?.length ?? 0);
+  const delimiter = '`'.repeat(longestBacktickRun + 1);
+  const padding = text.startsWith('`') || text.endsWith('`') ? ' ' : '';
+  const body = text.replaceAll('|', '\\|');
+  return `${delimiter}${padding}${body}${padding}${delimiter}`;
+}
+
 function groups(dataset: Dataset, pairs: FieldPair[], side: 'left' | 'right', options: KeyOptions): Map<string, DataRow[]> {
   const map = new Map<string, DataRow[]>();
   for (const row of dataset.rows) {
@@ -75,25 +91,61 @@ function valuesEqual(left: Scalar, right: Scalar, tolerance: Decimal, trimWhites
 
 function markdown(result: Omit<ReconciliationResult, 'markdown'>): string {
   const { summary, schema } = result;
+  const hasIssues = summary.valueMismatches + summary.missingOnLeft + summary.missingOnRight
+    + summary.duplicateKeysOnLeft + summary.duplicateKeysOnRight + summary.schemaIssues > 0;
   const lines = [
-    '# Mutabakat özeti',
+    '# Reconciliation result',
     '',
-    `- Kaynaklar: ${summary.leftSource} ↔ ${summary.rightSource}`,
-    `- Satırlar: ${summary.leftRows} ↔ ${summary.rightRows}`,
-    `- Ortak tekil anahtarlar: ${summary.matchedKeys}`,
-    `- Tam eşleşen satırlar: ${summary.matchedRows}`,
-    `- Değer farkı içeren satırlar: ${summary.mismatchedRows}`,
-    `- Yalnız sol kaynakta: ${summary.missingOnRight}`,
-    `- Yalnız sağ kaynakta: ${summary.missingOnLeft}`,
-    `- Yinelenen anahtarlar: ${summary.duplicateKeysOnLeft} (sol), ${summary.duplicateKeysOnRight} (sağ)`,
-    `- Değer uyuşmazlıkları: ${summary.valueMismatches}`,
-    `- Şema tutarsızlıkları: ${summary.schemaIssues}`,
+    `**${hasIssues ? 'Review differences' : 'All compared values match'}** · ${markdownCell(summary.leftSource, 80)} ↔ ${markdownCell(summary.rightSource, 80)}`,
     '',
-    `Sol kaynakta olup sağda olmayan alanlar: ${schema.onlyOnLeft.join(', ') || 'yok'}`,
-    `Sağ kaynakta olup solda olmayan alanlar: ${schema.onlyOnRight.join(', ') || 'yok'}`,
-    '',
-    'Veri yalnızca bu isteğin belleğinde işlendi; uygulama veritabanına veya kalıcı dosya alanına yazılmadı. Altyapı sağlayıcı günlükleri bu uygulamanın denetimi dışındadır.',
+    '| Metric | Result |',
+    '|:--|--:|',
+    `| Rows · A / B | ${summary.leftRows.toLocaleString()} / ${summary.rightRows.toLocaleString()} |`,
+    `| Shared unique keys | ${summary.matchedKeys.toLocaleString()} |`,
+    `| Exact matches | ${summary.matchedRows.toLocaleString()} |`,
+    `| Rows with value differences | ${summary.mismatchedRows.toLocaleString()} |`,
+    `| Only in A / B | ${summary.missingOnRight.toLocaleString()} / ${summary.missingOnLeft.toLocaleString()} |`,
+    `| Duplicate keys · A / B | ${summary.duplicateKeysOnLeft.toLocaleString()} / ${summary.duplicateKeysOnRight.toLocaleString()} |`,
+    `| Value mismatches | ${summary.valueMismatches.toLocaleString()} |`,
+    `| Schema differences | ${summary.schemaIssues.toLocaleString()} |`,
   ];
+
+  if (result.mismatches.length > 0) {
+    lines.push('', `## Value differences · first ${Math.min(result.mismatches.length, 12)} of ${result.mismatches.length}`, '',
+      '| Key | Field A | Value A | Field B | Value B |', '|:--|:--|:--|:--|:--|');
+    for (const mismatch of result.mismatches.slice(0, 12)) {
+      lines.push(`| ${markdownCell(mismatch.key)} | ${markdownCell(mismatch.leftField, 60)} | ${markdownCell(mismatch.leftValue)} | ${markdownCell(mismatch.rightField, 60)} | ${markdownCell(mismatch.rightValue)} |`);
+    }
+  }
+
+  const missingA = result.missing.onlyOnLeft.slice(0, 5);
+  const missingB = result.missing.onlyOnRight.slice(0, 5);
+  if (result.missing.onlyOnLeft.length + result.missing.onlyOnRight.length > 0) {
+    lines.push('', '## Missing records', '', '| Source | Record sample |', '|:--|:--|');
+    for (const row of missingA) lines.push(`| A only | ${markdownCell(row, 220)} |`);
+    for (const row of missingB) lines.push(`| B only | ${markdownCell(row, 220)} |`);
+    if (result.missing.onlyOnLeft.length > 5 || result.missing.onlyOnRight.length > 5) lines.push('', 'Additional records are available in the structured result and CSV report.');
+  }
+
+  const duplicates = [
+    ...result.duplicates.left.slice(0, 5).map((group) => ({ source: 'A', key: group.key, count: group.count })),
+    ...result.duplicates.right.slice(0, 5).map((group) => ({ source: 'B', key: group.key, count: group.count })),
+  ];
+  if (summary.duplicateKeysOnLeft + summary.duplicateKeysOnRight > 0) {
+    lines.push('', '## Duplicate keys · sample', '', '| Source | Key | Rows |', '|:--|:--|--:|');
+    for (const group of duplicates) lines.push(`| ${group.source} | ${markdownCell(group.key)} | ${group.count} |`);
+  }
+
+  if (summary.schemaIssues > 0) {
+    lines.push('', '## Schema differences', '', '| A only | B only |', '|:--|:--|');
+    const fields = Math.max(schema.onlyOnLeft.length, schema.onlyOnRight.length);
+    for (let index = 0; index < fields; index += 1) {
+      lines.push(`| ${markdownCell(schema.onlyOnLeft[index])} | ${markdownCell(schema.onlyOnRight[index])} |`);
+    }
+  }
+
+  if (result.previewTruncated) lines.push('', `> The comparison preview is limited to ${COMPARISON_PREVIEW_LIMIT} key groups. Full difference data is available in the structured result and CSV report.`);
+  lines.push('', '> Data is processed in memory for this request and is not written to application storage. Hosting-provider infrastructure logs may be outside the application’s control.');
   return lines.join('\n');
 }
 
