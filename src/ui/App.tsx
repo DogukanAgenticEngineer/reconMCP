@@ -4,8 +4,10 @@ import type { ReactElement } from 'react';
 import { Moon, Sun } from 'lucide-react';
 import { Badge } from '@/components/ui/badge.js';
 import { Button } from '@/components/ui/button.js';
+import { Breadcrumb } from '@/components/ui/breadcrumb.js';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card.js';
 import { Label } from '@/components/ui/label.js';
+import { Spinner } from '@/components/ui/spinner.js';
 import { Switch } from '@/components/ui/switch.js';
 import { McpConnectDialog } from './McpConnectDialog.js';
 import { ReconciliationSettings } from './ReconciliationSettings.js';
@@ -221,13 +223,16 @@ function App(): ReactElement {
 
   return (
     <div className={`theme-root ${appearance === 'dark' ? 'dark' : ''}`}>
-      <div className="app-shell dashboard-page">
+      <div className="app-shell dashboard-page" id="app-top">
         <div className="dashboard-container">
           <header className="topbar">
-            <div className="brand-block">
-              <div className="brand-kicker"><span className="brand-mark" aria-hidden="true" /> PRIVATE · DETERMINISTIC</div>
-              <h1 className="wordmark">Reconcile <span>MCP</span></h1>
-              <p className="brand-caption">Data reconciliation workspace</p>
+            <div className="brand-lockup">
+              <img className="brand-avatar" src="/reconcile-agent-icon.png" alt="" />
+              <div className="brand-block">
+                <div className="brand-kicker"><span className="brand-mark" aria-hidden="true" /> PRIVATE · DETERMINISTIC</div>
+                <h1 className="wordmark">Reconcile <span>MCP</span></h1>
+                <p className="brand-caption">Data reconciliation workspace</p>
+              </div>
             </div>
             <div className="topbar-actions">
               <div className="theme-control">
@@ -240,8 +245,10 @@ function App(): ReactElement {
             </div>
           </header>
 
+          <Breadcrumb items={[{ label: 'Workspace', href: '#sources' }, { label: 'Reconciliation', current: true }]} />
+
           <main>
-            <section className="source-grid" aria-label="Source files">
+            <section className="source-grid" id="sources" aria-label="Source files">
               <SourceCard side="left" upload={left} onInspect={inspectFile} onDraggingChange={updateDragging} onSelectError={onSelectError} />
               <SourceCard side="right" upload={right} onInspect={inspectFile} onDraggingChange={updateDragging} onSelectError={onSelectError} />
             </section>
@@ -273,7 +280,7 @@ function App(): ReactElement {
               <p role="status" className="inline-message">No matching column names were found. Add the key and value mappings manually.</p>
             )}
 
-            <section className="dashboard-workspace" aria-label="Reconciliation workspace">
+            <section className="dashboard-workspace" id="workspace" aria-label="Reconciliation workspace">
               <ResultsPanel result={result} tab={tab} onTabChange={setTab} onlyDifferences={onlyDifferences} />
               <aside className="action-column" aria-label="Run and comparison options">
                 <Card className="action-card">
@@ -283,7 +290,7 @@ function App(): ReactElement {
                   </CardHeader>
                   <CardContent className="action-card-content">
                     <Button type="button" className="run-button" onClick={() => void run()} disabled={!ready} aria-busy={working}>
-                      {working ? <><span className="loading-spinner button-spinner" aria-hidden="true" /> Comparing…</> : 'RUN'}
+                      {working ? <><Spinner className="button-spinner" /> Comparing…</> : 'RUN'}
                     </Button>
                     {left.file && right.file && <p className={`budget-note ${overBudget ? 'error-message' : ''}`}>Request budget: {formatBytes(requestBytes)} / 4.25 MB</p>}
                     {overBudget && <p role="alert" className="error-message">Combined files exceed the request limit.</p>}

@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactElement } from 'react';
 import { Search } from 'lucide-react';
+import type { ColumnDef } from '@tanstack/react-table';
 import { Badge } from '@/components/ui/badge.js';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card.js';
+import { DataTable } from '@/components/ui/data-table.js';
 import { Input } from '@/components/ui/input.js';
 import { Progress } from '@/components/ui/progress.js';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select.js';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table.js';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs.js';
 import type { ComparisonPreviewRow, ComparisonStatus, ReconciliationResult, Scalar } from '../core/types.js';
 import { displayScalar, filteredPreview, matchedRate, shorten, type PreviewStatusFilter } from './dashboard-logic.js';
@@ -110,34 +111,65 @@ function EmptyState({ children }: { children: string }): ReactElement {
   return <div className="empty-state"><p>{children}</p></div>;
 }
 
+function StatusBadge({ status }: { status: ComparisonStatus | 'schema' }): ReactElement {
+  const appearance = status === 'schema'
+    ? { label: 'Schema', className: 'status-schema' }
+    : STATUS[status];
+  return <Badge variant="outline" className={`status-badge ${appearance.className}`}>{appearance.label}</Badge>;
+}
+
+const comparisonColumns: ColumnDef<ComparisonPreviewRow>[] = [
+  {
+    accessorKey: 'key',
+    header: 'Key',
+    cell: ({ getValue }) => {
+      const key = getValue<string>();
+      return <span className="cell-ellipsis" title={key}>{keyText(key)}</span>;
+    },
+  },
+  {
+    accessorFn: (row) => STATUS[row.status].label,
+    id: 'status',
+    header: 'Status',
+    cell: ({ row }) => <StatusBadge status={row.original.status} />,
+  },
+  { accessorKey: 'leftRows', header: 'Rows A', cell: ({ getValue }) => getValue<number>().toLocaleString() },
+  { accessorKey: 'rightRows', header: 'Rows B', cell: ({ getValue }) => getValue<number>().toLocaleString() },
+  { accessorKey: 'mismatchFields', header: 'Different fields', cell: ({ getValue }) => getValue<number>() || '—' },
+];
+
+const differenceColumns: ColumnDef<DifferenceRow>[] = [
+  {
+    accessorKey: 'key',
+    header: 'Key / record',
+    cell: ({ getValue }) => {
+      const key = getValue<string>();
+      return <span className="cell-ellipsis" title={key}>{keyText(key)}</span>;
+    },
+  },
+  {
+    accessorFn: (row) => row.status === 'schema' ? 'Schema' : STATUS[row.status].label,
+    id: 'status',
+    header: 'Status',
+    cell: ({ row }) => <StatusBadge status={row.original.status} />,
+  },
+  { accessorKey: 'field', header: 'Field', cell: ({ getValue }) => <ValueCell value={getValue<string>()} /> },
+  { accessorKey: 'left', header: 'Source A', cell: ({ getValue }) => <ValueCell value={getValue<string>()} /> },
+  { accessorKey: 'right', header: 'Source B', cell: ({ getValue }) => <ValueCell value={getValue<string>()} /> },
+];
+
 function ComparisonTable({ rows, previewTruncated, onlyDifferences }: { rows: ComparisonPreviewRow[]; previewTruncated: boolean; onlyDifferences: boolean }): ReactElement {
   if (rows.length === 0) return <EmptyState>{onlyDifferences ? 'No differences found. Turn off the filter to show matching records.' : 'No key groups match these filters.'}</EmptyState>;
   return (
     <>
       {previewTruncated && <p className="table-note">Showing up to 50 key groups. The downloaded CSV report contains all differences.</p>}
-      <div className="table-wrap">
-        <Table aria-label="Comparison preview">
-          <TableHeader><TableRow>
-            <TableHead>Key</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead className="numeric-cell">Rows A</TableHead>
-            <TableHead className="numeric-cell">Rows B</TableHead>
-            <TableHead className="numeric-cell">Different fields</TableHead>
-          </TableRow></TableHeader>
-          <TableBody>
-            {rows.map((row, index) => {
-              const status = STATUS[row.status];
-              return <TableRow key={`${row.key}-${index}`}>
-                <TableCell><span className="cell-ellipsis" title={row.key}>{keyText(row.key)}</span></TableCell>
-                <TableCell><Badge variant="outline" className={`status-badge ${status.className}`}>{status.label}</Badge></TableCell>
-                <TableCell className="numeric-cell">{row.leftRows.toLocaleString()}</TableCell>
-                <TableCell className="numeric-cell">{row.rightRows.toLocaleString()}</TableCell>
-                <TableCell className="numeric-cell">{row.mismatchFields || '—'}</TableCell>
-              </TableRow>;
-            })}
-          </TableBody>
-        </Table>
-      </div>
+      <DataTable
+        aria-label="Comparison preview"
+        columns={comparisonColumns}
+        data={rows}
+        getColumnClassName={(columnId) => ['leftRows', 'rightRows', 'mismatchFields'].includes(columnId) ? 'numeric-cell' : undefined}
+        label="Comparison preview"
+      />
     </>
   );
 }
@@ -147,29 +179,7 @@ function DifferenceTable({ rows, truncated }: { rows: DifferenceRow[]; truncated
   return (
     <>
       {truncated && <p className="table-note">Showing the first 100 matching details. Download CSV for the complete report.</p>}
-      <div className="table-wrap">
-        <Table aria-label="Difference details">
-          <TableHeader><TableRow>
-            <TableHead>Key / record</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Field</TableHead>
-            <TableHead>Source A</TableHead>
-            <TableHead>Source B</TableHead>
-          </TableRow></TableHeader>
-          <TableBody>
-            {rows.map((row) => {
-              const status = row.status === 'schema' ? { label: 'Schema', className: 'status-schema' } : STATUS[row.status];
-              return <TableRow key={row.id}>
-                <TableCell><span className="cell-ellipsis" title={row.key}>{keyText(row.key)}</span></TableCell>
-                <TableCell><Badge variant="outline" className={`status-badge ${status.className}`}>{status.label}</Badge></TableCell>
-                <TableCell><ValueCell value={row.field} /></TableCell>
-                <TableCell><ValueCell value={row.left} /></TableCell>
-                <TableCell><ValueCell value={row.right} /></TableCell>
-              </TableRow>;
-            })}
-          </TableBody>
-        </Table>
-      </div>
+      <DataTable columns={differenceColumns} data={rows} label="Difference details" />
     </>
   );
 }
