@@ -1,4 +1,9 @@
-# Reconcile MCP
+<h1 align="center">
+  <img src="public/reconcile-agent-icon.png" width="76" height="76" alt="Reconcile MCP icon" /><br />
+  Reconcile MCP
+</h1>
+
+<p align="center"><strong>Privacy-first, deterministic data reconciliation</strong></p>
 
 Reconcile MCP, iki CSV/Excel (XLSX), salt okunur PostgreSQL veya REST kaynağını karşılaştıran açık kaynaklı bir MCP sunucusu ve tarayıcı çalışma alanıdır. Deterministik TypeScript çekirdeği eksik kayıtları, yinelenen anahtarları, değer/tutar uyuşmazlıklarını ve şema farklarını raporlar. Veriler için uygulama veritabanı veya kalıcı dosya deposu yoktur.
 
@@ -6,15 +11,14 @@ Reconcile MCP, iki CSV/Excel (XLSX), salt okunur PostgreSQL veya REST kaynağın
 
 ## Özellikler
 
-- Responsive dashboard'da A/B için CSV/XLSX sürükle-bırak veya klavyeyle dosya seçme, dosya adı/biçimi/boyutu/satır ve sütun bilgisi, ortak başlıklardan otomatik kimlik alanı seçimi (`id`/`uuid`/`key` vb. öncelikli; yoksa ilk ortak alan), `Comparison`/`Differences`/`Summary` sekmeleri, canlı özet metrikleri ve tema geçişi vardır. Açık tema varsayılandır; tercih yalnız sayfa belleğinde kalır.
 - Responsive dashboard shadcn/ui bileşenleriyle A/B için CSV/XLSX sürükle-bırak veya klavyeyle dosya seçme, dosya adı/biçimi/boyutu/satır ve sütun bilgisi, ortak başlıklardan otomatik kimlik alanı seçimi (`id`/`uuid`/`key` vb. öncelikli; yoksa ilk ortak alan), `Comparison`/`Differences`/`Summary` sekmeleri, canlı özet metrikleri ve tema geçişi sunar. Açık tema varsayılandır; tercih yalnız sayfa belleğinde kalır.
 - Otomatik anahtar eşlemesini kullanıcı değiştirebilir, 1–10 çiftli bileşik anahtar belirleyebilir, farklı A/B başlıklarını manuel eşleyebilir (en çok 100 karşılaştırma alanı) ve sayısal tolerans girebilir. `Ignore case (text)`, `Trim whitespace` ve `Show only differences` ayarları karşılaştırma veya görünür tabloyu gerçekten değiştirir.
 - `CONNECT MCP` endpoint, taşıma biçimi ve araç listesini erişilebilir bağlantı penceresinde gösterir; o ortama ait `/api/mcp` URL'sini kopyalar, dış istemciye zaten bağlı olduğunu iddia etmez. `RUN` karşılaştırmayı başlatır; CSV indirme bağlantısı tüm fark kategorilerini içerir. Sonuç panelinde anahtar/alan/değer araması ve durum filtresi vardır.
-- Dashboard'ın karşılaştırma önizlemesi en fazla 50 anahtar grubunu gösterir ve fark gruplarını önceleyerek `Show only differences` filtresini korur. Ayrıntı ve önizleme sınırları açıkça yazılır; indirilen CSV tam fark raporudur.
+- Dashboard'ın karşılaştırma önizlemesi en fazla 50 anahtar grubunu gösterir; arama, durum filtresi, sütun sıralama ve sayfalama içerir. Fark gruplarını önceleyen `Show only differences` filtresi korunur. Ayrıntı ve önizleme sınırları açıkça yazılır; indirilen CSV tam fark raporudur.
 - CSV ve XLSX (ilk çalışma sayfası) bellekten ayrıştırma; PostgreSQL'de quoted identifier ve parametreli LIMIT ile yalnız `SELECT`/read-only transaction; REST'te yalnız HTTPS GET.
 - `compare_datasets`, `find_missing_records`, `detect_duplicates`, `detect_value_mismatches` ve `generate_report` araçları; stateless Streamable HTTP (`/api/mcp`) ile yerel STDIO. Statik `reconcile://guide` MCP kaynağı ve `reconcile_workflow` prompt'u istemci keşfine açılır.
 - MCP yanıtlarında başlıklı, metrik tablolu ve sınırlandırılmış fark tablolu Markdown ile aynı bulguların makinece okunabilir `structuredContent` sunumu birlikte döner. İstemcinin nihai görünümü değişebilir; yapılandırılmış alanlar kanonik kalır. Karşılaştırma saf TypeScript'tir; AI kullanmaz.
-- shadcn/ui ve Radix primitives, React, Vite, Tailwind 3, TypeScript strict, Zod, Vitest ve ESLint.
+- shadcn/ui (Radix ve Base UI primitives), TanStack Table, React, Vite, Tailwind 3, TypeScript strict, Zod, Vitest ve ESLint.
 
 ## Sınırlar
 

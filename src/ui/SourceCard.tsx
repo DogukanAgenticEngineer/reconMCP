@@ -2,6 +2,7 @@ import type { ChangeEvent, DragEvent } from 'react';
 import { FileSpreadsheet, Upload } from 'lucide-react';
 import { Badge } from '@/components/ui/badge.js';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card.js';
+import { Spinner } from '@/components/ui/spinner.js';
 import { ACCEPTED_FILES, fileFormat, formatBytes, MAX_FILE_BYTES, type Side, type SourceUpload } from './dashboard-logic.js';
 
 interface SourceCardProps {
@@ -67,7 +68,7 @@ export function SourceCard({ side, upload, onInspect, onDraggingChange, onSelect
             onChange={selectFile}
           />
           <span className="drop-icon-wrap" aria-hidden="true">
-            {upload.busy ? <span className="loading-spinner" /> : <Upload className="drop-icon" />}
+            {upload.busy ? <Spinner /> : <Upload className="drop-icon" />}
           </span>
           <span className="drop-primary">{upload.busy ? 'Reading file…' : upload.file ? 'Drop a new file or browse' : `Drop file ${label} here`}</span>
           <span className="drop-secondary">{upload.error || acceptHint}</span>
