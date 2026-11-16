@@ -36,6 +36,12 @@ External connections are subject to deployment network policy. Do not place cred
 
 Provide one or more \`keyPairs\` mapping a field in A to a field in B. Optionally supply \`fieldPairs\`, a non-negative base-10 \`tolerance\`, \`trimWhitespace\`, and \`caseSensitiveValues\`. Key matching remains case-sensitive unless explicitly configured otherwise.
 
+## Output shape
+
+Each tool returns two complementary views. The text content is a Markdown report with an outcome headline, a metric table, and bounded tables for value differences, missing records, duplicates and schema differences. Source-provided labels, keys and values are rendered as inert inline code, not active Markdown links or HTML. Preview details are explicitly bounded; they are never silently presented as a complete report.
+
+The machine-readable structuredContent object uses the schema reconcile.result.v1. Its presentation contains a status (matched or needs_review), a headline, metricCards with labels/values/tones, statusCounts, comparisonPreview, previewTruncated and previewLimit. Canonical totals and full findings remain in summary, missing, duplicates, mismatches and schema. The generate_report tool also returns markdown and complete reportCsv when the whole response fits within 2 MB.
+
 ## Synthetic example
 
 \`\`\`json

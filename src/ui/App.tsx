@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import type { ReactElement } from 'react';
 import { Moon, Sun } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert.js';
 import { Badge } from '@/components/ui/badge.js';
 import { Button } from '@/components/ui/button.js';
 import { Breadcrumb } from '@/components/ui/breadcrumb.js';
@@ -229,7 +230,7 @@ function App(): ReactElement {
             <div className="brand-lockup">
               <img className="brand-avatar" src="/reconcile-agent-icon.png" alt="" />
               <div className="brand-block">
-                <div className="brand-kicker"><span className="brand-mark" aria-hidden="true" /> PRIVATE · DETERMINISTIC</div>
+                <div className="brand-kicker">PRIVATE · DETERMINISTIC</div>
                 <h1 className="wordmark">Reconcile <span>MCP</span></h1>
                 <p className="brand-caption">Data reconciliation workspace</p>
               </div>
@@ -273,11 +274,13 @@ function App(): ReactElement {
                   onFieldPairsChange={updateFieldPairs}
                   onToleranceChange={(value) => { setTolerance(value); clearResult(); }}
                 />
-                {(!keyPairsValid || !fieldPairsValid) && <p className="mapping-error" role="alert">Choose unique fields that exist in both sources. Key and comparison fields cannot overlap.</p>}
+                {(!keyPairsValid || !fieldPairsValid) && (
+                  <Alert variant="destructive" className="mapping-alert"><AlertDescription>Choose unique fields that exist in both sources. Key and comparison fields cannot overlap.</AlertDescription></Alert>
+                )}
               </CardContent>
             </Card>}
             {left.columns.length > 0 && right.columns.length > 0 && commonPairs.length === 0 && (
-              <p role="status" className="inline-message">No matching column names were found. Add the key and value mappings manually.</p>
+              <Alert role="status" className="inline-alert"><AlertDescription>No matching column names were found. Add the key and value mappings manually.</AlertDescription></Alert>
             )}
 
             <section className="dashboard-workspace" id="workspace" aria-label="Reconciliation workspace">
@@ -293,9 +296,9 @@ function App(): ReactElement {
                       {working ? <><Spinner className="button-spinner" /> Comparing…</> : 'RUN'}
                     </Button>
                     {left.file && right.file && <p className={`budget-note ${overBudget ? 'error-message' : ''}`}>Request budget: {formatBytes(requestBytes)} / 4.25 MB</p>}
-                    {overBudget && <p role="alert" className="error-message">Combined files exceed the request limit.</p>}
+                    {overBudget && <Alert variant="destructive" className="action-alert"><AlertDescription>Combined files exceed the request limit.</AlertDescription></Alert>}
                     {!keyPairsValid && bothInspected && <p className="action-hint">Select at least one valid key pair to enable RUN.</p>}
-                    {error && <p role="alert" className="error-message">{error}</p>}
+                    {error && <Alert variant="destructive" className="action-alert"><AlertDescription>{error}</AlertDescription></Alert>}
                     {result && reportUrl && <a className="download-button" href={reportUrl} download="reconcile-report.csv">Download complete CSV report</a>}
                   </CardContent>
                 </Card>

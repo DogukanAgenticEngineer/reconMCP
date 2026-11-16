@@ -18,6 +18,7 @@ Reconcile MCP, iki CSV/Excel (XLSX), salt okunur PostgreSQL veya REST kaynağın
 - CSV ve XLSX (ilk çalışma sayfası) bellekten ayrıştırma; PostgreSQL'de quoted identifier ve parametreli LIMIT ile yalnız `SELECT`/read-only transaction; REST'te yalnız HTTPS GET.
 - `compare_datasets`, `find_missing_records`, `detect_duplicates`, `detect_value_mismatches` ve `generate_report` araçları; stateless Streamable HTTP (`/api/mcp`) ile yerel STDIO. Statik `reconcile://guide` MCP kaynağı ve `reconcile_workflow` prompt'u istemci keşfine açılır.
 - MCP yanıtlarında başlıklı, metrik tablolu ve sınırlandırılmış fark tablolu Markdown ile aynı bulguların makinece okunabilir `structuredContent` sunumu birlikte döner. İstemcinin nihai görünümü değişebilir; yapılandırılmış alanlar kanonik kalır. Karşılaştırma saf TypeScript'tir; AI kullanmaz.
+- Bağlantı penceresi MCP sonucunun biçimini `Outcome → Metrics → Differences → Structured data` akışıyla açıklar; Claude/ChatGPT'nin son sunumu yine MCP istemcisinin özelliklerine bağlıdır.
 - shadcn/ui (Radix ve Base UI primitives), TanStack Table, React, Vite, Tailwind 3, TypeScript strict, Zod, Vitest ve ESLint.
 
 ## Sınırlar
