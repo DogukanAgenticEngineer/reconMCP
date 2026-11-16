@@ -1,5 +1,6 @@
 import type { ChangeEvent, DragEvent } from 'react';
 import { FileSpreadsheet, Upload } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert.js';
 import { Badge } from '@/components/ui/badge.js';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card.js';
 import { Spinner } from '@/components/ui/spinner.js';
@@ -71,7 +72,7 @@ export function SourceCard({ side, upload, onInspect, onDraggingChange, onSelect
             {upload.busy ? <Spinner /> : <Upload className="drop-icon" />}
           </span>
           <span className="drop-primary">{upload.busy ? 'Reading file…' : upload.file ? 'Drop a new file or browse' : `Drop file ${label} here`}</span>
-          <span className="drop-secondary">{upload.error || acceptHint}</span>
+          <span className="drop-secondary">{acceptHint}</span>
           <span className="drop-action">Browse files</span>
         </label>
         {upload.file && !upload.error && (
@@ -86,7 +87,7 @@ export function SourceCard({ side, upload, onInspect, onDraggingChange, onSelect
             {upload.columns.length > 7 && <span className="column-overflow">+{upload.columns.length - 7} more</span>}
           </div>
         )}
-        {upload.error && <p role="alert" className="source-error">{upload.error}</p>}
+        {upload.error && <Alert variant="destructive" className="source-alert"><AlertDescription>{upload.error}</AlertDescription></Alert>}
         {upload.busy && <p role="status" aria-live="polite" className="source-progress">Inspecting in memory…</p>}
         <span className="sr-only">Maximum file size {MAX_FILE_BYTES / 1024 / 1024} megabytes.</span>
       </CardContent>

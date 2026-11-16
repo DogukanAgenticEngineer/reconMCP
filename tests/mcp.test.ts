@@ -42,6 +42,10 @@ describe('MCP Streamable HTTP protocol', () => {
     const guideText = guideContent && 'text' in guideContent ? guideContent.text : '';
     expect(guideText).toContain('Synthetic example');
     expect(guideText).toContain('structured content');
+    expect(guideText).toContain('## Output shape');
+    expect(guideText).toContain('presentation');
+    expect(guideText).toContain('metricCards');
+    expect(guideText).toContain('reportCsv');
 
     const prompts = await client.listPrompts();
     expect(prompts.prompts.some((prompt) => prompt.name === 'reconcile_workflow')).toBe(true);

@@ -46,7 +46,8 @@ describe('source security boundaries', () => {
       'src/server/reconcile-handler.ts', 'src/sources/load.ts', 'src/sources/load-mcp.ts',
       'src/mcp/create-server.ts', 'src/ui/App.tsx', 'src/ui/SourceCard.tsx',
       'src/ui/ResultsPanel.tsx', 'src/ui/ReconciliationSettings.tsx', 'src/ui/McpConnectDialog.tsx',
-      'src/ui/main.tsx', 'src/core/report.ts',
+      'src/ui/main.tsx', 'src/core/report.ts', 'src/components/ui/alert.tsx',
+      'src/components/ui/data-table.tsx', 'src/components/ui/progress.tsx', 'src/components/ui/spinner.tsx',
     ];
     for (const file of runtimeFiles) {
       const source = read(file);
@@ -62,16 +63,32 @@ describe('source security boundaries', () => {
     const connect = read('src/ui/McpConnectDialog.tsx');
     expect(app).toContain("'RUN'");
     expect(app).toContain('<Switch');
+    expect(app).toContain('/reconcile-agent-icon.png');
+    expect(app).toContain('<Breadcrumb items=');
     expect(connect).toContain('CONNECT MCP');
+    expect(connect).toContain('Client-ready result');
+    expect(connect).toContain('reconcile.result.v1');
+    expect(connect).toContain('<Alert');
     expect(app).toContain('/api/mcp');
     expect(connect).toContain('{endpoint}');
+    expect(read('index.html')).toContain('reconcile-agent-icon.png');
+    expect(read('app.config.ts')).toContain('.png');
     expect(read('src/ui/ResultsPanel.tsx')).toContain('<Tabs');
     expect(read('src/ui/SourceCard.tsx')).toMatch(/onDrop=/);
+    expect(read('src/ui/SourceCard.tsx')).toContain('<Alert');
     expect(read('src/ui/ReconciliationSettings.tsx')).toContain('Numeric tolerance');
+    const table = read('src/components/ui/data-table.tsx');
+    expect(table).toContain('getSortedRowModel');
+    expect(table).toContain('getPaginationRowModel');
+    expect(read('src/components/ui/progress.tsx')).toContain('@base-ui/react/progress');
+    expect(read('src/components/ui/spinner.tsx')).toContain('LoaderCircle');
+    expect(read('src/components/ui/alert.tsx')).toContain('role="alert"');
 
     const server = read('src/mcp/create-server.ts');
     expect(server).toContain('registerResource');
     expect(server).toContain('registerPrompt');
+    expect(server).toContain('## Output shape');
+    expect(server).toContain('statusCounts');
     expect(server).toContain('structuredContent');
 
     const styles = read('src/ui/styles.css');
