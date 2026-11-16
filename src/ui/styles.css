@@ -122,6 +122,8 @@
 .breadcrumb-item a:hover, .breadcrumb-item a:focus-visible { color: hsl(var(--primary)); }
 .breadcrumb-item [aria-current="page"] { color: hsl(var(--foreground)); font-weight: 600; }
 .breadcrumb-separator { width: 12px; height: 12px; color: hsl(var(--muted-foreground) / 65%); }
+.tabs-root[data-orientation="horizontal"] { flex-direction: column; }
+.tabs-root[data-orientation="vertical"] { flex-direction: row; }
 
 .source-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin-bottom: 18px; }
 .source-card,
