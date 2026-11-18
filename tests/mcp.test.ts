@@ -4,6 +4,7 @@ import type { AddressInfo } from 'node:net';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { afterEach, describe, expect, it } from 'vitest';
+import { MAX_COMBINED_BYTES } from '../src/sources/csv.js';
 import { handleMcpRequest } from '../src/server/mcp-handler.js';
 
 describe('MCP Streamable HTTP protocol', () => {
@@ -31,8 +32,8 @@ describe('MCP Streamable HTTP protocol', () => {
 
     const listing = await client.listTools();
     expect(listing.tools.map((tool) => tool.name)).toEqual([
-      'compare_datasets', 'find_missing_records', 'detect_duplicates',
-      'detect_value_mismatches', 'generate_report',
+      'estimate_operation_carbon', 'compare_datasets', 'find_missing_records',
+      'detect_duplicates', 'detect_value_mismatches', 'generate_report',
     ]);
 
     const resources = await client.listResources();
@@ -46,6 +47,8 @@ describe('MCP Streamable HTTP protocol', () => {
     expect(guideText).toContain('presentation');
     expect(guideText).toContain('metricCards');
     expect(guideText).toContain('reportCsv');
+    expect(guideText).toContain('estimated operational carbon footprint');
+    expect(guideText).toContain('estimate_operation_carbon');
 
     const prompts = await client.listPrompts();
     expect(prompts.prompts.some((prompt) => prompt.name === 'reconcile_workflow')).toBe(true);
@@ -78,6 +81,8 @@ describe('MCP Streamable HTTP protocol', () => {
     expect(structured.comparisonPreview[0]?.status).toBe('mismatch');
     expect(structured.presentation.comparisonPreview[0]?.status).toBe('mismatch');
     expect(structured.mismatches).toHaveLength(1);
+    expect((structured as typeof structured & { carbonEstimate: { phase: string; estimatedGramsCO2: number } }).carbonEstimate.phase).toBe('completed');
+    expect((structured as typeof structured & { carbonEstimate: { phase: string; estimatedGramsCO2: number } }).carbonEstimate.estimatedGramsCO2).toBeGreaterThanOrEqual(0);
 
     const content = result.content as Array<{ type: string; text?: string }>;
     const markdown = content.find((entry) => entry.type === 'text')?.text ?? '';
@@ -93,5 +98,80 @@ describe('MCP Streamable HTTP protocol', () => {
     expect(reportStructured.reportCsv).toContain('value_mismatch');
     expect(reportStructured.markdown).toContain('| Metric | Result |');
     expect(reportStructured.presentation.metricCards.length).toBeGreaterThan(3);
+
+    const estimate = await client.callTool({
+      name: 'estimate_operation_carbon',
+      arguments: { operation: 'generate_report', expectedDurationSeconds: 10 },
+    });
+    expect(estimate.isError).not.toBe(true);
+    const estimateStructured = estimate.structuredContent as {
+      schemaVersion: string;
+      operation: string;
+      carbonEstimate: { phase: string; estimatedGramsCO2: number; durationMs: number };
+    };
+    expect(estimateStructured.schemaVersion).toBe('reconcile.carbon.v1');
+    expect(estimateStructured.operation).toBe('generate_report');
+    expect(estimateStructured.carbonEstimate.phase).toBe('planned');
+    expect(estimateStructured.carbonEstimate.durationMs).toBe(10_000);
+    expect(estimateStructured.carbonEstimate.estimatedGramsCO2).toBeGreaterThan(0);
+    expect(JSON.stringify(estimate)).toContain('not metered');
+
+    const previousHosts = process.env.RECONCILE_ALLOWED_HOSTS;
+    process.env.RECONCILE_ALLOWED_HOSTS = '';
+    try {
+      const failedCall = await client.callTool({
+        name: 'compare_datasets',
+        arguments: {
+          left: { type: 'rows', rows: [{ id: 'demo' }] },
+          right: { type: 'rest', url: 'https://api.example.com/data' },
+          keyPairs: [{ left: 'id', right: 'id' }],
+        },
+      });
+      expect(failedCall.isError).toBe(true);
+      const failedStructured = failedCall.structuredContent as { carbonEstimate: { phase: string; operation: string } };
+      expect(failedStructured.carbonEstimate.phase).toBe('completed');
+      expect(failedStructured.carbonEstimate.operation).toBe('compare_datasets');
+    } finally {
+      if (previousHosts === undefined) delete process.env.RECONCILE_ALLOWED_HOSTS;
+      else process.env.RECONCILE_ALLOWED_HOSTS = previousHosts;
+    }
+  });
+
+  it('enforces exact Origin allowlisting and reflects only approved CORS origins', async () => {
+    const previous = process.env.MCP_ALLOWED_ORIGINS;
+    process.env.MCP_ALLOWED_ORIGINS = 'https://trusted.example';
+    try {
+      httpServer = createServer((req, res) => { void handleMcpRequest(req, res); });
+      httpServer.listen(0, '127.0.0.1');
+      await once(httpServer, 'listening');
+      const address = httpServer.address() as AddressInfo;
+      const url = `http://127.0.0.1:${address.port}/api/mcp`;
+      const allowed = await fetch(url, { method: 'OPTIONS', headers: { Origin: 'https://trusted.example' } });
+      expect(allowed.status).toBe(204);
+      expect(allowed.headers.get('access-control-allow-origin')).toBe('https://trusted.example');
+      expect(allowed.headers.get('access-control-allow-origin')).not.toBe('*');
+
+      const denied = await fetch(url, { method: 'OPTIONS', headers: { Origin: 'https://attacker.example' } });
+      expect(denied.status).toBe(403);
+      expect(denied.headers.get('access-control-allow-origin')).toBeNull();
+    } finally {
+      if (previous === undefined) delete process.env.MCP_ALLOWED_ORIGINS;
+      else process.env.MCP_ALLOWED_ORIGINS = previous;
+    }
+  });
+
+  it('uses the documented 4.25 MiB request cap instead of the SDK 4 MiB default', async () => {
+    httpServer = createServer((req, res) => { void handleMcpRequest(req, res); });
+    httpServer.listen(0, '127.0.0.1');
+    await once(httpServer, 'listening');
+    const address = httpServer.address() as AddressInfo;
+    const body = ' '.repeat(4 * 1024 * 1024 + 1);
+    expect(Buffer.byteLength(body)).toBeLessThan(MAX_COMBINED_BYTES);
+    const response = await fetch(`http://127.0.0.1:${address.port}/api/mcp`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
+      body,
+    });
+    expect(response.status).not.toBe(413);
   });
 });

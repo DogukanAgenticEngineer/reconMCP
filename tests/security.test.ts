@@ -44,7 +44,7 @@ describe('source security boundaries', () => {
     const runtimeFiles = [
       'api/mcp.ts', 'api/reconcile.ts', 'src/server/mcp-handler.ts',
       'src/server/reconcile-handler.ts', 'src/sources/load.ts', 'src/sources/load-mcp.ts',
-      'src/mcp/create-server.ts', 'src/ui/App.tsx', 'src/ui/SourceCard.tsx',
+      'src/mcp/create-server.ts', 'src/mcp/carbon.ts', 'src/ui/App.tsx', 'src/ui/SourceCard.tsx',
       'src/ui/ResultsPanel.tsx', 'src/ui/ReconciliationSettings.tsx', 'src/ui/McpConnectDialog.tsx',
       'src/ui/main.tsx', 'src/core/report.ts', 'src/components/ui/alert.tsx',
       'src/components/ui/data-table.tsx', 'src/components/ui/progress.tsx', 'src/components/ui/spinner.tsx',
@@ -90,6 +90,11 @@ describe('source security boundaries', () => {
     expect(server).toContain('## Output shape');
     expect(server).toContain('statusCounts');
     expect(server).toContain('structuredContent');
+    expect(server).toContain('estimate_operation_carbon');
+    expect(server).toContain('carbonEstimate');
+    const mcpHandler = read('src/server/mcp-handler.ts');
+    expect(mcpHandler).toContain('MCP_ALLOWED_ORIGINS');
+    expect(mcpHandler).not.toContain("setHeader('Access-Control-Allow-Origin', '*')");
 
     const styles = read('src/ui/styles.css');
     const runStyle = styles.match(/\.run-button \{[^}]+\}/)?.[0] ?? '';

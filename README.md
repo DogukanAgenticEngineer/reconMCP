@@ -16,7 +16,7 @@ Reconcile MCP, iki CSV/Excel (XLSX), salt okunur PostgreSQL veya REST kaynağın
 - `CONNECT MCP` endpoint, taşıma biçimi ve araç listesini erişilebilir bağlantı penceresinde gösterir; o ortama ait `/api/mcp` URL'sini kopyalar, dış istemciye zaten bağlı olduğunu iddia etmez. `RUN` karşılaştırmayı başlatır; CSV indirme bağlantısı tüm fark kategorilerini içerir. Sonuç panelinde anahtar/alan/değer araması ve durum filtresi vardır.
 - Dashboard'ın karşılaştırma önizlemesi en fazla 50 anahtar grubunu gösterir; arama, durum filtresi, sütun sıralama ve sayfalama içerir. Fark gruplarını önceleyen `Show only differences` filtresi korunur. Ayrıntı ve önizleme sınırları açıkça yazılır; indirilen CSV tam fark raporudur.
 - CSV ve XLSX (ilk çalışma sayfası) bellekten ayrıştırma; PostgreSQL'de quoted identifier ve parametreli LIMIT ile yalnız `SELECT`/read-only transaction; REST'te yalnız HTTPS GET.
-- `compare_datasets`, `find_missing_records`, `detect_duplicates`, `detect_value_mismatches` ve `generate_report` araçları; stateless Streamable HTTP (`/api/mcp`) ile yerel STDIO. Statik `reconcile://guide` MCP kaynağı ve `reconcile_workflow` prompt'u istemci keşfine açılır.
+- `compare_datasets`, `find_missing_records`, `detect_duplicates`, `detect_value_mismatches` ve `generate_report` araçları; stateless Streamable HTTP (`/api/mcp`) ile yerel STDIO. Her karşılaştırma sonucu, sunucu işlem süresi ve açıklanmış güç/şebeke katsayılarıyla modellenen karbon tahmini taşır; `estimate_operation_carbon` aracı çalıştırma öncesi tahmin verir. Bu değer sayaç ölçümü veya sağlayıcı faturası değildir; harici REST/PostgreSQL, ağ, istemci, veri merkezi ek yükü/PUE ve gömülü donanım emisyonlarını kapsamaz. Statik `reconcile://guide` MCP kaynağı ve `reconcile_workflow` prompt'u istemci keşfine açılır.
 - MCP yanıtlarında başlıklı, metrik tablolu ve sınırlandırılmış fark tablolu Markdown ile aynı bulguların makinece okunabilir `structuredContent` sunumu birlikte döner. İstemcinin nihai görünümü değişebilir; yapılandırılmış alanlar kanonik kalır. Karşılaştırma saf TypeScript'tir; AI kullanmaz.
 - Bağlantı penceresi MCP sonucunun biçimini `Outcome → Metrics → Differences → Structured data` akışıyla açıklar; Claude/ChatGPT'nin son sunumu yine MCP istemcisinin özelliklerine bağlıdır.
 - shadcn/ui (Radix ve Base UI primitives), TanStack Table, React, Vite, Tailwind 3, TypeScript strict, Zod, Vitest ve ESLint.
@@ -50,6 +50,8 @@ pnpm dev
 ```
 
 Arayüz `http://localhost:3000`'de, mutabakat API'si `/api/reconcile`, MCP `/api/mcp`'de açılır. Network kaynakları `.env` içinde `RECONCILE_ALLOWED_HOSTS` listesi boşsa kapalıdır. Wildcard kullanmayın. PostgreSQL port varsayılanı yalnız `5432`'dir; gerekiyorsa `RECONCILE_ALLOWED_POSTGRES_PORTS`'a açıkça ekleyin.
+
+Browser tabanlı MCP istemcileri için `.env` içindeki `MCP_ALLOWED_ORIGINS` alanına virgülle ayrılmış tam `https://origin.example` değerleri ekleyin; wildcard desteklenmez ve boş ayar browser Origin başlıklarını varsayılan olarak reddeder. Native istemciler Origin göndermiyorsa çalışmaya devam eder. Karbon modeli varsayılan olarak 50 W açıklayıcı sunucu güç varsayımı ve IEA'nın 2024 dünya elektrik üretim yoğunluğu olan 445 g CO₂/kWh değerini kullanır. Uygun yerel/sağlayıcı verileriniz varsa `RECONCILE_CARBON_ESTIMATED_POWER_W` ve `RECONCILE_CARBON_GRID_INTENSITY_G_CO2_KWH` değerlerini ayarlayın; tahmin yine metered telemetry değildir. Katsayılar [IEA Electricity 2025](https://www.iea.org/reports/electricity-2025/emissions) içindeki 2024 küresel üretim yoğunluğuna dayanır.
 
 Doğrulama komutları:
 
