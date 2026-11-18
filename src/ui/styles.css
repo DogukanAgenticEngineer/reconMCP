@@ -434,3 +434,57 @@
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; animation-delay: 0s !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
 }
+
+
+/* Connect MCP: animated spectral frame with strict monochrome hover inversion. */
+.connect-button {
+  position: relative;
+  isolation: isolate;
+  min-height: 40px;
+  padding: 0 16px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background:
+    linear-gradient(#fff, #fff) padding-box,
+    conic-gradient(from var(--connect-angle, 0deg), #ff3b30, #ff9f0a, #ffe600, #34c759, #00c7be, #0a84ff, #5e5ce6, #bf5af2, #ff3b30) border-box;
+  color: #101010;
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 45%), 0 0 13px rgb(94 92 230 / 24%), 0 0 27px rgb(0 199 190 / 15%);
+  font-size: 11px;
+  font-weight: 760;
+  letter-spacing: 0.075em;
+  transition: color 220ms ease, background-color 220ms ease, box-shadow 260ms ease, transform 220ms ease;
+  animation: connect-spectrum 8s linear infinite, connect-glow 3.2s ease-in-out infinite;
+}
+.connect-button:hover {
+  border-color: transparent;
+  background:
+    linear-gradient(#080808, #080808) padding-box,
+    conic-gradient(from var(--connect-angle, 0deg), #ff3b30, #ff9f0a, #ffe600, #34c759, #00c7be, #0a84ff, #5e5ce6, #bf5af2, #ff3b30) border-box;
+  color: #fff;
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 22%), 0 0 18px rgb(255 255 255 / 22%), 0 0 34px rgb(94 92 230 / 25%);
+  transform: translateY(-1px);
+}
+.connect-button:active { transform: translateY(0) scale(0.98); }
+.connect-button:focus-visible { outline: 3px solid hsl(var(--ring) / 48%); outline-offset: 4px; }
+.dark .connect-button {
+  background:
+    linear-gradient(#080808, #080808) padding-box,
+    conic-gradient(from var(--connect-angle, 0deg), #ff3b30, #ff9f0a, #ffe600, #34c759, #00c7be, #0a84ff, #5e5ce6, #bf5af2, #ff3b30) border-box;
+  color: #fff;
+}
+.dark .connect-button:hover {
+  background:
+    linear-gradient(#fff, #fff) padding-box,
+    conic-gradient(from var(--connect-angle, 0deg), #ff3b30, #ff9f0a, #ffe600, #34c759, #00c7be, #0a84ff, #5e5ce6, #bf5af2, #ff3b30) border-box;
+  color: #080808;
+  box-shadow: 0 0 18px rgb(255 255 255 / 28%), 0 0 34px rgb(255 255 255 / 18%);
+}
+@property --connect-angle { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+@keyframes connect-spectrum { to { --connect-angle: 360deg; } }
+@keyframes connect-glow {
+  0%, 100% { filter: saturate(1); }
+  50% { filter: saturate(1.35); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .connect-button { animation: none; }
+}

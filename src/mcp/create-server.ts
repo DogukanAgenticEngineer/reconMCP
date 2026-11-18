@@ -43,7 +43,7 @@ Provide one or more \`keyPairs\` mapping a field in A to a field in B. Optionall
 
 Each comparison tool returns two complementary views. The text content is a Markdown report with an outcome headline, a metric table, and bounded tables for value differences, missing records, duplicates and schema differences. Source-provided labels, keys and values are rendered as inert inline code, not active Markdown links or HTML. Preview details are explicitly bounded; they are never silently presented as a complete report. Every execution also includes an estimated operational carbon footprint; use estimate_operation_carbon to model a planned call.
 
-The machine-readable structuredContent object uses the schema reconcile.result.v1. Its presentation contains a status (matched or needs_review), a headline, metricCards with labels/values/tones, statusCounts, comparisonPreview, previewTruncated and previewLimit. Canonical totals and full findings remain in summary, missing, duplicates, mismatches and schema. A carbonEstimate object is an additive modeled estimate, not metered consumption; it reports elapsed time, assumed power, grid factor and boundary. The generate_report tool also returns markdown and complete reportCsv when the whole response fits within 2 MB.
+The machine-readable structuredContent object uses the schema reconcile.result.v1. Its presentation contains a status (matched or needs_review), a headline, metricCards with labels/values/tones, statusCounts, comparisonPreview, previewTruncated, previewLimit and chart-ready datasets. charts.statusDistribution is a pie dataset; findingsByCategory and mismatchesByField are bar datasets. Labels and values are derived from the actual reconciliation result. No time-series chart is emitted because source rows do not imply a trustworthy time axis. Canonical totals and full findings remain in summary, missing, duplicates, mismatches and schema. A carbonEstimate object is an additive modeled estimate, not metered consumption; it reports elapsed time, assumed power, grid factor and boundary. The generate_report tool also returns markdown and complete reportCsv when the whole response fits within 2 MB.
 
 ## Synthetic example
 
@@ -106,6 +106,40 @@ function resultPresentation(result: ReconciliationResult): Record<string, unknow
     comparisonPreview: result.comparisonPreview,
     previewTruncated: result.previewTruncated,
     previewLimit: COMPARISON_PREVIEW_LIMIT,
+    charts: {
+      statusDistribution: {
+        type: 'pie',
+        title: 'Reconciliation status distribution',
+        labels: ['Exact matches', 'Value mismatches', 'Only in A', 'Only in B'],
+        values: [summary.matchedRows, summary.mismatchedRows, summary.missingOnRight, summary.missingOnLeft],
+        unit: 'rows',
+      },
+      findingsByCategory: {
+        type: 'bar',
+        title: 'Findings by category',
+        labels: ['Value mismatches', 'Missing in A', 'Missing in B', 'Duplicate keys in A', 'Duplicate keys in B', 'Schema differences'],
+        values: [summary.valueMismatches, summary.missingOnLeft, summary.missingOnRight, summary.duplicateKeysOnLeft, summary.duplicateKeysOnRight, summary.schemaIssues],
+        unit: 'findings',
+      },
+      mismatchesByField: (() => {
+        const counts = new Map<string, number>();
+        for (const mismatch of result.mismatches) {
+          const label = mismatch.leftField === mismatch.rightField
+            ? mismatch.leftField
+            : `${mismatch.leftField} → ${mismatch.rightField}`;
+          counts.set(label, (counts.get(label) ?? 0) + 1);
+        }
+        const entries = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 20);
+        return {
+          type: 'bar',
+          title: 'Value mismatches by field',
+          labels: entries.map(([label]) => label),
+          values: entries.map(([, count]) => count),
+          unit: 'mismatches',
+          truncated: counts.size > entries.length,
+        };
+      })(),
+    },
   };
 }
 
@@ -216,7 +250,7 @@ export function createMcpServer(): McpServer {
   register(
     'compare_datasets',
     'Compare datasets',
-    'Compare two CSV, XLSX, JSON-row, read-only PostgreSQL, or HTTPS REST sources. Supply explicit key pairs and optional field pairs/tolerance. Returns a Markdown metrics table, bounded difference tables and structuredContent for client-native rendering.',
+    'Compare two CSV, XLSX, JSON-row, read-only PostgreSQL, or HTTPS REST sources. Supply explicit key pairs and optional field pairs/tolerance. Returns a Markdown metrics table, bounded difference tables and structuredContent for client-native rendering, including pie/bar chart datasets derived from the actual result.',
     (result) => compactResult(result),
     (result) => `${result.summary.matchedRows.toLocaleString()} exact matches; ${result.summary.valueMismatches.toLocaleString()} value mismatches; ${result.missing.onlyOnLeft.length.toLocaleString()} rows only in A; ${result.missing.onlyOnRight.length.toLocaleString()} rows only in B.`,
   );
