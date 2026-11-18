@@ -3,6 +3,8 @@ import { canonicalColumnName, inferFieldPairs } from '../core/matching.js';
 
 export const MAX_FILE_BYTES = 4 * 1024 * 1024;
 export const MAX_COMBINED_BYTES = Math.floor(4.25 * 1024 * 1024);
+export const MAX_SOURCES = 10;
+export const MIN_SOURCES = 2;
 const FIELD_PART_OVERHEAD = 512;
 const FILE_PART_OVERHEAD = 1024;
 const FINAL_BOUNDARY_OVERHEAD = 512;
@@ -25,6 +27,9 @@ export interface SourceUpload {
   error: string;
   dragging: boolean;
 }
+
+/** Array of SourceUpload for multi-source mode (2–10 sources). */
+export type MultiSourceUpload = SourceUpload[];
 
 export function emptyUpload(): SourceUpload {
   return { file: null, columns: [], rowCount: null, busy: false, error: '', dragging: false };
@@ -82,6 +87,22 @@ export function estimateMultipartRequestBytes(
   const fieldBytes = fields.reduce((total, field) => total + encoder.encode(field.name).byteLength + encoder.encode(field.value).byteLength + FIELD_PART_OVERHEAD, 0);
   const fileBytes = files.reduce((total, file) => total + Math.max(0, file.size) + encoder.encode(file.name).byteLength + (encoder.encode(file.filename).byteLength * 3) + FILE_PART_OVERHEAD, 0);
   return fieldBytes + fileBytes + FINAL_BOUNDARY_OVERHEAD;
+}
+
+/**
+ * Estimate the multipart request size for multi-source (2–10 files) mode.
+ * Each source sends a `fileSource_<n>` file part and a sources JSON field.
+ */
+export function estimateMultiSourceRequestBytes(
+  sources: Array<{ name: string; size: number }>,
+  extraFields: Array<{ name: string; value: string }> = [],
+): number {
+  const fileFields = sources.map((s, i) => ({ name: `fileSource_${i}`, filename: s.name, size: s.size }));
+  const baseFields: Array<{ name: string; value: string }> = [
+    { name: 'mode', value: 'multi-compare' },
+    ...extraFields,
+  ];
+  return estimateMultipartRequestBytes(baseFields, fileFields);
 }
 
 export function filteredPreview(

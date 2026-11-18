@@ -12,10 +12,13 @@ interface SourceCardProps {
   onInspect: (side: Side, file: File) => void;
   onDraggingChange: (side: Side, dragging: boolean) => void;
   onSelectError: (side: Side, message: string) => void;
+  /** Optional numeric index shown instead of A/B when in multi-source mode. */
+  index?: number;
 }
 
-export function SourceCard({ side, upload, onInspect, onDraggingChange, onSelectError }: SourceCardProps) {
-  const label = side === 'left' ? 'A' : 'B';
+export function SourceCard({ side, upload, onInspect, onDraggingChange, onSelectError, index }: SourceCardProps) {
+  const label = index !== undefined ? String(index + 1) : (side === 'left' ? 'A' : 'B');
+  const inputId = index !== undefined ? `source-${index}` : `source-${side}`;
   const acceptHint = upload.file
     ? `${formatBytes(upload.file.size)} · ${upload.rowCount?.toLocaleString() ?? '—'} rows`
     : 'CSV or XLSX · max 4 MB';
@@ -55,13 +58,13 @@ export function SourceCard({ side, upload, onInspect, onDraggingChange, onSelect
       <CardContent className="source-card-content">
         <label
           className={`drop-zone ${upload.dragging ? 'is-dragging' : ''} ${upload.error ? 'has-error' : ''} ${upload.busy ? 'is-busy' : ''}`}
-          htmlFor={`source-${side}`}
+          htmlFor={inputId}
           onDragOver={(event) => { event.preventDefault(); onDraggingChange(side, true); }}
           onDragLeave={leaveDropzone}
           onDrop={dropFile}
         >
           <input
-            id={`source-${side}`}
+            id={inputId}
             className="visually-hidden-file"
             type="file"
             accept={ACCEPTED_FILES}

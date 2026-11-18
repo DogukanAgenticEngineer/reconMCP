@@ -664,3 +664,134 @@
   .onboarding-live-dot { animation: none; }
   .onboarding-progress [data-slot="progress-indicator"] { transition: none; }
 }
+
+/* -------------------------------------------------------------------------- */
+/* MagicUI Visual Components & Multi-Source Additions                          */
+/* -------------------------------------------------------------------------- */
+
+/* Dither Background */
+.dither-bg {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+/* Animated Theme Toggler */
+.animated-theme-toggler {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid hsl(var(--border));
+  border-radius: 999px;
+  background: hsl(var(--card));
+  color: hsl(var(--foreground));
+  cursor: pointer;
+  transition: border-color 180ms ease, background-color 180ms ease, transform 180ms ease;
+}
+.animated-theme-toggler:hover {
+  border-color: hsl(var(--primary));
+  background: hsl(var(--accent));
+}
+.animated-theme-toggler:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
+.theme-icon-track {
+  position: relative;
+  width: 18px;
+  height: 18px;
+}
+.theme-morph-icon {
+  position: absolute;
+  inset: 0;
+  width: 18px;
+  height: 18px;
+  transition: transform 320ms cubic-bezier(0.34, 1.56, 0.64, 1), opacity 240ms ease;
+}
+.theme-morph-sun {
+  color: hsl(42 95% 52%);
+  transform: rotate(0deg) scale(1);
+  opacity: 1;
+}
+.theme-morph-moon {
+  color: hsl(219 85% 65%);
+  transform: rotate(0deg) scale(1);
+  opacity: 1;
+}
+.theme-morph-hidden {
+  transform: rotate(90deg) scale(0.2);
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Typing Animation cursor */
+.typing-cursor {
+  display: inline-block;
+  margin-left: 2px;
+  color: hsl(var(--primary));
+  font-weight: 700;
+  animation: typing-blink 900ms infinite;
+}
+@keyframes typing-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* Highlighter effect */
+.highlight-text {
+  position: relative;
+  display: inline;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: linear-gradient(104deg, hsl(var(--primary) / 14%) 0%, hsl(var(--primary) / 22%) 100%);
+  color: inherit;
+  font-weight: 600;
+}
+
+/* Multi-source UI styling */
+.multi-source-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 10px 14px;
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius);
+  background: hsl(var(--card));
+}
+.multi-source-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.multi-source-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+  margin-bottom: 18px;
+}
+.multi-source-card-wrapper {
+  position: relative;
+}
+.remove-source-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 10;
+  height: 26px;
+  padding: 0 8px;
+  font-size: 11px;
+}
+.pairwise-table-card {
+  margin-bottom: 18px;
+}
+

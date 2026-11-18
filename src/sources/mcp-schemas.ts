@@ -37,3 +37,15 @@ export const mcpCompareInputSchema = z.object({
 
 export type McpSource = z.infer<typeof mcpSourceSchema>;
 export type McpCompareInput = z.infer<typeof mcpCompareInputSchema>;
+
+export const mcpMultiCompareInputSchema = z.object({
+  sources: z.array(mcpSourceSchema).min(2).max(10),
+  keyPairs: z.array(fieldPairSchema).min(1).max(10).optional(),
+  fieldPairs: z.array(fieldPairSchema).max(100).optional(),
+  tolerance: z.string().regex(/^\d{1,30}(?:\.\d{1,18})?$/).max(50).optional(),
+  trimWhitespace: z.boolean().default(true),
+  caseSensitiveKeys: z.boolean().default(true),
+  caseSensitiveValues: z.boolean().default(true),
+}).strict();
+
+export type McpMultiCompareInput = z.infer<typeof mcpMultiCompareInputSchema>;

@@ -74,3 +74,15 @@ export const reconcileRequestSchema = z.object({
 export type SourceDefinition = z.infer<typeof sourceDefinitionSchema>;
 export type ReconcileRequest = z.infer<typeof reconcileRequestSchema>;
 export type CompareOptionsInput = z.infer<typeof compareOptionsSchema>;
+
+export const multiReconcileRequestSchema = z.object({
+  sources: z.array(sourceDefinitionSchema).min(2).max(10),
+  keyPairs: compareOptionsSchema.shape.keyPairs,
+  fieldPairs: compareOptionsSchema.shape.fieldPairs,
+  tolerance: compareOptionsSchema.shape.tolerance,
+  trimWhitespace: compareOptionsSchema.shape.trimWhitespace,
+  caseSensitiveKeys: compareOptionsSchema.shape.caseSensitiveKeys,
+  caseSensitiveValues: compareOptionsSchema.shape.caseSensitiveValues,
+}).strict();
+
+export type MultiReconcileRequest = z.infer<typeof multiReconcileRequestSchema>;
