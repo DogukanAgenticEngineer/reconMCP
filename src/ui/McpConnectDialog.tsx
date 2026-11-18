@@ -27,7 +27,8 @@ const OUTPUT_STEPS = [
   { label: 'Metrics', detail: 'Matches, value differences and records only in A or B.' },
   { label: 'Differences', detail: 'Readable Markdown tables with bounded, safely formatted samples.' },
   { label: 'Carbon estimate', detail: 'Per-call modeled CO2 estimate with its assumptions and system boundary; planned calls can be estimated first.' },
-  { label: 'Structured data', detail: 'reconcile.result.v1 for client-native rendering; full CSV via generate_report.' },
+  { label: 'Structured data', detail: 'reconcile.result.v1 with canonical totals, findings and full CSV via generate_report.' },
+  { label: 'Chart datasets', detail: 'Pie status distribution plus bar breakdowns by finding category and mismatched field, calculated from real results.' },
 ];
 
 export function McpConnectDialog({ endpoint }: { endpoint: string }): ReactElement {
@@ -85,7 +86,7 @@ export function McpConnectDialog({ endpoint }: { endpoint: string }): ReactEleme
               </li>
             ))}
           </ol>
-          <p className="mcp-output-note">Every comparison returns a modeled carbon estimate (not metered or a provider invoice). Claude/ChatGPT rendering depends on the client.</p>
+          <p className="mcp-output-note">Chart datasets are structured data, not embedded images. MCP clients can render them when their UI supports charts; no synthetic time-series is generated without a real time field. Carbon is modeled, not metered.</p>
         </div>
         <p className="mcp-privacy-note">Requests are processed in memory and not saved by the app. Hosting-provider infrastructure logging may be outside the app’s control.</p>
       </DialogContent>
