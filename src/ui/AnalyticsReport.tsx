@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactElement } from 'react';
 import { animate, stagger } from 'animejs';
 import { Activity, BarChart3, Boxes, ChartNoAxesCombined, Layers3 } from 'lucide-react';
@@ -20,14 +20,24 @@ interface AnalyticsReportProps { result: ReconciliationResult }
 
 const number = (value: number): string => value.toLocaleString(undefined, { maximumFractionDigits: 2 });
 const compactKey = (value: string): string => value.length > 42 ? `${value.slice(0, 39)}…` : value;
-const escapeHtml = (value: string): string => value.replace(/[&<>\"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', "'": '&#39;' })[character] ?? character);
+const HTML_ENTITIES: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', "'": '&#39;' };
+const escapeHtml = (value: string): string => value.replace(/[&<>\"']/g, (character) => HTML_ENTITIES[character] ?? character);
 
 export function AnalyticsReport({ result }: AnalyticsReportProps): ReactElement {
+  const [plotlyReady, setPlotlyReady] = useState(Boolean(window.Plotly));
   const scatterRef = useRef<HTMLDivElement>(null);
   const surfaceRef = useRef<HTMLDivElement>(null);
   const paretoRef = useRef<HTMLDivElement>(null);
   const divergingRef = useRef<HTMLDivElement>(null);
   const plotRefs = useMemo(() => [scatterRef, surfaceRef, paretoRef, divergingRef], []);
+
+  useEffect(() => {
+    if (window.Plotly) { setPlotlyReady(true); return; }
+    const script = document.querySelector<HTMLScriptElement>('script[src^="https://cdn.plot.ly/"]');
+    const onLoad = (): void => setPlotlyReady(Boolean(window.Plotly));
+    script?.addEventListener('load', onLoad);
+    return () => script?.removeEventListener('load', onLoad);
+  }, []);
 
   const analysis = useMemo(() => {
     const fieldCounts = new Map<string, number>();
@@ -99,7 +109,7 @@ export function AnalyticsReport({ result }: AnalyticsReportProps): ReactElement 
   useEffect(() => {
     const nodes = plotRefs.map((ref) => ref.current).filter((node): node is HTMLDivElement => Boolean(node));
     const plotly = window.Plotly;
-    if (!plotly || nodes.length !== 4) return;
+    if (!plotlyReady || !plotly || nodes.length !== 4) return;
     const fontColor = getComputedStyle(document.documentElement).getPropertyValue('--foreground').trim()
       ? getComputedStyle(document.querySelector('.theme-root') ?? document.documentElement).color
       : '#64748b';
@@ -169,7 +179,7 @@ export function AnalyticsReport({ result }: AnalyticsReportProps): ReactElement 
       observer.disconnect();
       nodes.forEach((node) => plotly.purge(node));
     };
-  }, [analysis, plotRefs]);
+  }, [analysis, plotRefs, plotlyReady]);
 
   useEffect(() => {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
@@ -178,7 +188,7 @@ export function AnalyticsReport({ result }: AnalyticsReportProps): ReactElement 
     return () => { motion.pause(); cards.pause(); };
   }, [result]);
 
-  const plotlyAvailable = Boolean(window.Plotly);
+  const plotlyAvailable = plotlyReady;
   const noMismatchData = analysis.totalMismatches === 0;
   return (
     <section className="analytics-report" aria-label="Advanced data analytics report">
