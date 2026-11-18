@@ -34,6 +34,7 @@ describe('MCP Streamable HTTP protocol', () => {
     expect(listing.tools.map((tool) => tool.name)).toEqual([
       'estimate_operation_carbon', 'compare_datasets', 'find_missing_records',
       'detect_duplicates', 'detect_value_mismatches', 'generate_report',
+      'compare_multiple_datasets',
     ]);
 
     const resources = await client.listResources();
@@ -129,6 +130,29 @@ describe('MCP Streamable HTTP protocol', () => {
     expect(estimateStructured.carbonEstimate.durationMs).toBe(10_000);
     expect(estimateStructured.carbonEstimate.estimatedGramsCO2).toBeGreaterThan(0);
     expect(JSON.stringify(estimate)).toContain('not metered');
+
+    const multiToolCall = await client.callTool({
+      name: 'compare_multiple_datasets',
+      arguments: {
+        sources: [
+          { type: 'rows', rows: [{ id: '1', amount: '10' }], name: 'SourceA' },
+          { type: 'rows', rows: [{ id: '1', amount: '10' }], name: 'SourceB' },
+          { type: 'rows', rows: [{ id: '1', amount: '12' }], name: 'SourceC' },
+        ],
+        keyPairs: [{ left: 'id', right: 'id' }],
+        fieldPairs: [{ left: 'amount', right: 'amount' }],
+      },
+    });
+    expect(multiToolCall.isError).not.toBe(true);
+    const multiStructured = multiToolCall.structuredContent as {
+      totalSources: number;
+      totalComparisons: number;
+      aggregateSummary: { totalMatches: number; totalMismatches: number };
+    };
+    expect(multiStructured.totalSources).toBe(3);
+    expect(multiStructured.totalComparisons).toBe(3);
+    expect(multiStructured.aggregateSummary.totalMatches).toBe(1);
+    expect(multiStructured.aggregateSummary.totalMismatches).toBe(2);
 
     const previousHosts = process.env.RECONCILE_ALLOWED_HOSTS;
     process.env.RECONCILE_ALLOWED_HOSTS = '';

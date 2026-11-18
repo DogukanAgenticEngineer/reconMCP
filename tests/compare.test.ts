@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compareDatasets } from '../src/core/compare.js';
+import { compareDatasets, compareMultipleDatasets } from '../src/core/compare.js';
 import type { Dataset } from '../src/core/types.js';
 import { resultToCsv } from '../src/core/report.js';
 
@@ -113,5 +113,29 @@ describe('deterministic reconciliation', () => {
 
     expect(result.markdown).toContain(`\`${hostileName}\``);
     expect(result.markdown).toContain('`` `bad` \\| [click](https://evil.invalid) ``');
+  });
+
+  it('validates multi-source bounds and calculates pairwise combinations', () => {
+    const s1: Dataset = { name: 'S1', columns: ['id', 'val'], rows: [{ id: '1', val: 'a' }] };
+    const s2: Dataset = { name: 'S2', columns: ['id', 'val'], rows: [{ id: '1', val: 'a' }] };
+    const s3: Dataset = { name: 'S3', columns: ['id', 'val'], rows: [{ id: '1', val: 'b' }] };
+
+    expect(() => compareMultipleDatasets({
+      sources: [s1],
+      keyPairs: [{ left: 'id', right: 'id' }],
+    })).toThrow('Kaynak sayısı 2 ile 10 arasında olmalıdır.');
+
+    const res = compareMultipleDatasets({
+      sources: [s1, s2, s3],
+      keyPairs: [{ left: 'id', right: 'id' }],
+      fieldPairs: [{ left: 'val', right: 'val' }],
+    });
+
+    expect(res.totalSources).toBe(3);
+    expect(res.totalComparisons).toBe(3); // 3*2/2 = 3
+    expect(res.pairwise).toHaveLength(3);
+    expect(res.aggregateSummary.totalMatches).toBe(1);
+    expect(res.aggregateSummary.totalMismatches).toBe(2);
+    expect(res.aggregateSummary.worstPair).not.toBeNull();
   });
 });

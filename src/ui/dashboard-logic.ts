@@ -97,7 +97,6 @@ export function estimateMultiSourceRequestBytes(
   sources: Array<{ name: string; size: number }>,
   extraFields: Array<{ name: string; value: string }> = [],
 ): number {
-  const encoder = new TextEncoder();
   const fileFields = sources.map((s, i) => ({ name: `fileSource_${i}`, filename: s.name, size: s.size }));
   const baseFields: Array<{ name: string; value: string }> = [
     { name: 'mode', value: 'multi-compare' },

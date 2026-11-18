@@ -60,8 +60,8 @@ function App(): ReactElement {
 
   const setUpload = (side: Side): Dispatch<SetStateAction<SourceUpload>> => side === 'left' ? setLeft : setRight;
 
-  const activeColumnsA = multiMode ? (multiSources[0]?.columns ?? []) : left.columns;
-  const activeColumnsB = multiMode ? (multiSources[1]?.columns ?? []) : right.columns;
+  const activeColumnsA = useMemo(() => (multiMode ? (multiSources[0]?.columns ?? []) : left.columns), [multiMode, multiSources, left.columns]);
+  const activeColumnsB = useMemo(() => (multiMode ? (multiSources[1]?.columns ?? []) : right.columns), [multiMode, multiSources, right.columns]);
 
   const commonPairs = useMemo(() => commonFieldPairs(activeColumnsA, activeColumnsB), [activeColumnsA, activeColumnsB]);
   const toleranceInvalid = !isValidTolerance(tolerance);
