@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ReactElement } from 'react';
+import { animate, stagger } from 'animejs';
 import {
-  ArrowLeft, ArrowRight, BarChart3, Check, FileSpreadsheet,
+  ArrowLeft, ArrowRight, BarChart3, Check, FileSpreadsheet, FileText,
   GitCompareArrows, PlugZap, ShieldCheck, Sparkles,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge.js';
@@ -65,6 +66,8 @@ const steps = [
 export function OnboardingDialog(): ReactElement {
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState(0);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
   // Keep the active step defined even if state is ever outside the tuple bounds.
   const current = steps[step] ?? steps[0];
   const StepIcon = current.icon;
@@ -77,12 +80,35 @@ export function OnboardingDialog(): ReactElement {
     }
   }, []);
 
+  useEffect(() => {
+    const root = dialogRef.current;
+    const grid = root?.querySelector<HTMLElement>('.onboarding-feature-grid');
+    if (!open || !grid || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const items = Array.from(grid.children).filter((item): item is HTMLElement => item instanceof HTMLElement);
+    if (items.length === 0) return;
+    const columns = Math.max(1, getComputedStyle(grid).gridTemplateColumns.split(' ').length);
+    const rows = Math.ceil(items.length / columns);
+    const entrance = animate(items, {
+      opacity: [0, 1],
+      y: [12, 0],
+      delay: stagger(65, { grid: [columns, rows], from: 'center', axis: 'x' }),
+      duration: 520,
+      ease: 'outExpo',
+    });
+    return () => { entrance.pause(); };
+  }, [open, step]);
+
+  useEffect(() => {
+    if (!open || step !== 0) videoRef.current?.pause();
+  }, [open, step]);
+
   const finish = (): void => {
     try {
       window.localStorage.setItem(STORAGE_KEY, 'true');
     } catch {
       // The onboarding remains dismissible when browser storage is unavailable.
     }
+    videoRef.current?.pause();
     setOpen(false);
   };
 
@@ -93,7 +119,7 @@ export function OnboardingDialog(): ReactElement {
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => { if (!nextOpen) finish(); }}>
-      <DialogContent className="onboarding-dialog" aria-describedby="onboarding-description">
+      <DialogContent ref={dialogRef} className="onboarding-dialog" aria-describedby="onboarding-description">
         <div className="onboarding-topline">
           <div className="onboarding-brand">
             <span className="onboarding-brand-mark"><GitCompareArrows aria-hidden="true" /></span>
@@ -102,14 +128,45 @@ export function OnboardingDialog(): ReactElement {
           <Badge variant="outline">QUICK TOUR</Badge>
         </div>
 
-        <DialogHeader className="onboarding-heading">
+        <DialogHeader className={step === 0 ? 'onboarding-heading onboarding-heading-welcome' : 'onboarding-heading'}>
           <div className="onboarding-step-meta">
             <Badge variant="secondary">{current.eyebrow}</Badge>
             <span>{String(step + 1).padStart(2, '0')} / {String(steps.length).padStart(2, '0')}</span>
           </div>
-          <div className="onboarding-hero-icon"><StepIcon aria-hidden="true" /></div>
-          <DialogTitle>{current.title}</DialogTitle>
-          <DialogDescription id="onboarding-description">{current.description}</DialogDescription>
+          {step === 0 ? (
+            <div className="onboarding-welcome-layout">
+              <div className="onboarding-welcome-copy">
+                <div className="onboarding-hero-icon"><StepIcon aria-hidden="true" /></div>
+                <DialogTitle>{current.title}</DialogTitle>
+                <DialogDescription id="onboarding-description">{current.description}</DialogDescription>
+                <div className="onboarding-file-types" aria-label="Supported spreadsheet formats">
+                  <span><FileSpreadsheet aria-hidden="true" /> Excel</span>
+                  <span><FileText aria-hidden="true" /> CSV</span>
+                </div>
+              </div>
+              <div className="onboarding-video-panel">
+                <div className="onboarding-video-heading"><span className="onboarding-live-dot" /> PRODUCT WALKTHROUGH</div>
+                <video
+                  ref={videoRef}
+                  className="onboarding-video"
+                  controls
+                  preload="metadata"
+                  playsInline
+                  aria-label="Reconcile MCP product walkthrough"
+                >
+                  <source src="/reconcile-mcp-saas-promo.mp4" type="video/mp4" />
+                  Your browser does not support embedded video.
+                </video>
+                <p className="onboarding-video-caption">See a reconciliation come together, from files to findings.</p>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="onboarding-hero-icon"><StepIcon aria-hidden="true" /></div>
+              <DialogTitle>{current.title}</DialogTitle>
+              <DialogDescription id="onboarding-description">{current.description}</DialogDescription>
+            </>
+          )}
         </DialogHeader>
 
         <Progress className="onboarding-progress" value={((step + 1) / steps.length) * 100} aria-label="Onboarding progress" />
