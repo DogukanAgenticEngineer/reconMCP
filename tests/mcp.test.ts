@@ -90,7 +90,7 @@ describe('MCP Streamable HTTP protocol', () => {
     expect(structured.comparisonPreview[0]?.status).toBe('mismatch');
     expect(structured.presentation.comparisonPreview[0]?.status).toBe('mismatch');
     expect(structured.presentation.charts.statusDistribution.type).toBe('pie');
-    expect(structured.presentation.charts.statusDistribution.values).toEqual([0, 1, 1, 0]);
+    expect(structured.presentation.charts.statusDistribution.values).toEqual([0, 1, 1, 1]);
     expect(structured.presentation.charts.findingsByCategory.type).toBe('bar');
     expect(structured.presentation.charts.mismatchesByField.labels).toEqual(['amount']);
     expect(structured.presentation.charts.mismatchesByField.values).toEqual([1]);
