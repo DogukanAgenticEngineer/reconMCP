@@ -65,7 +65,8 @@ const steps = [
 export function OnboardingDialog(): ReactElement {
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState(0);
-  const current = steps[step];
+  // Keep the active step defined even if state is ever outside the tuple bounds.
+  const current = steps[step] ?? steps[0];
   const StepIcon = current.icon;
 
   useEffect(() => {
