@@ -27,7 +27,7 @@ export const mcpSourceSchema = z.discriminatedUnion('type', [
 export const mcpCompareInputSchema = z.object({
   left: mcpSourceSchema,
   right: mcpSourceSchema,
-  keyPairs: z.array(fieldPairSchema).min(1).max(10),
+  keyPairs: z.array(fieldPairSchema).min(1).max(10).optional(),
   fieldPairs: z.array(fieldPairSchema).max(100).optional(),
   tolerance: z.string().regex(/^\d{1,30}(?:\.\d{1,18})?$/).max(50).optional(),
   trimWhitespace: z.boolean().default(true),

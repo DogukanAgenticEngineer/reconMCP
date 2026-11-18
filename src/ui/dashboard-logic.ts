@@ -1,4 +1,5 @@
 import type { ComparisonPreviewRow, ComparisonStatus, ReconciliationResult, Scalar } from '../core/types.js';
+import { canonicalColumnName, inferFieldPairs } from '../core/matching.js';
 
 export const MAX_FILE_BYTES = 4 * 1024 * 1024;
 export const MAX_COMBINED_BYTES = Math.floor(4.25 * 1024 * 1024);
@@ -41,21 +42,7 @@ export function normalizedColumnName(name: string): string {
 }
 
 export function commonFieldPairs(leftColumns: string[], rightColumns: string[]): Pair[] {
-  const rightByNormalized = new Map<string, string>();
-  for (const column of rightColumns) {
-    const normalized = normalizedColumnName(column);
-    if (normalized && !rightByNormalized.has(normalized)) rightByNormalized.set(normalized, column);
-  }
-  const usedRight = new Set<string>();
-  const pairs: Pair[] = [];
-  for (const left of leftColumns) {
-    const normalized = normalizedColumnName(left);
-    const right = rightByNormalized.get(normalized);
-    if (!right || usedRight.has(right)) continue;
-    usedRight.add(right);
-    pairs.push({ left, right });
-  }
-  return pairs;
+  return inferFieldPairs(leftColumns, rightColumns);
 }
 
 const PREFERRED_KEYS = [
@@ -64,7 +51,7 @@ const PREFERRED_KEYS = [
 
 export function chooseKeyPair(pairs: Pair[]): Pair | null {
   for (const preferred of PREFERRED_KEYS) {
-    const pair = pairs.find(({ left }) => normalizedColumnName(left) === preferred);
+    const pair = pairs.find(({ left }) => canonicalColumnName(left) === preferred);
     if (pair) return pair;
   }
   return pairs[0] ?? null;

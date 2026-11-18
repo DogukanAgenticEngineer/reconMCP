@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactElement } from 'react';
 import { Search } from 'lucide-react';
+import { animate, stagger } from 'animejs';
 import type { ColumnDef } from '@tanstack/react-table';
 import { Badge } from '@/components/ui/badge.js';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card.js';
@@ -196,8 +197,23 @@ function Summary({ result }: { result: ReconciliationResult }): ReactElement {
     { label: 'Schema differences', value: summary.schemaIssues, tone: 'neutral' },
   ];
   const rate = matchedRate(result);
+  const findingBars = [
+    { label: 'Value mismatches', value: summary.valueMismatches },
+    { label: 'Missing in A', value: summary.missingOnLeft },
+    { label: 'Missing in B', value: summary.missingOnRight },
+    { label: 'Duplicate keys', value: summary.duplicateKeysOnLeft + summary.duplicateKeysOnRight },
+    { label: 'Schema differences', value: summary.schemaIssues },
+  ];
+  const maxFinding = Math.max(1, ...findingBars.map((item) => item.value));
+  const fieldCounts = new Map<string, number>();
+  result.mismatches.forEach((item) => {
+    const label = item.leftField === item.rightField ? item.leftField : `${item.leftField} → ${item.rightField}`;
+    fieldCounts.set(label, (fieldCounts.get(label) ?? 0) + 1);
+  });
+  const topFields = [...fieldCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
+  const topField = topFields[0];
   return (
-    <div className="summary-content">
+    <div className="summary-content analysis-summary">
       <div className="metric-grid">
         {metrics.map((metric, index) => <Card key={metric.label} className={`metric-card metric-${metric.tone}`} style={{ animationDelay: `${index * 45}ms` }}>
           <CardHeader className="metric-header"><CardDescription>{metric.label}</CardDescription></CardHeader>
@@ -214,10 +230,20 @@ function Summary({ result }: { result: ReconciliationResult }): ReactElement {
           <Progress className="match-progress" value={rate} aria-label="Exact match rate among shared unique keys" />
         </CardContent>
       </Card>
-      <div className="source-count-line">
-        <span>{summary.leftSource}: {summary.leftRows.toLocaleString()} rows</span>
-        <span>{summary.rightSource}: {summary.rightRows.toLocaleString()} rows</span>
-      </div>
+      <Card className="analysis-card">
+        <CardHeader className="analysis-card-header"><CardTitle>Finding distribution</CardTitle><CardDescription>Measured from the complete comparison result</CardDescription></CardHeader>
+        <CardContent className="analysis-card-content">
+          {findingBars.map((item) => <div className="analysis-bar-row" key={item.label}>
+            <div className="analysis-bar-label"><span>{item.label}</span><strong>{item.value.toLocaleString()}</strong></div>
+            <div className="analysis-bar-track"><div className="analysis-bar-fill" style={{ width: `${(item.value / maxFinding) * 100}%` }} /></div>
+          </div>)}
+        </CardContent>
+      </Card>
+      {topField && <Card className="analysis-insight">
+        <CardHeader className="analysis-card-header"><Badge variant="outline" className="status-mismatch">Most frequent mismatch</Badge><CardTitle>{topField[0]}</CardTitle><CardDescription>{topField[1].toLocaleString()} mismatches in this field</CardDescription></CardHeader>
+        {topFields.length > 1 && <CardContent className="analysis-card-content">{topFields.slice(1).map(([field, count]) => <div className="analysis-field-line" key={field}><span>{field}</span><strong>{count.toLocaleString()}</strong></div>)}</CardContent>}
+      </Card>}
+      <div className="source-count-line"><span>{summary.leftSource}: {summary.leftRows.toLocaleString()} rows</span><span>{summary.rightSource}: {summary.rightRows.toLocaleString()} rows</span></div>
     </div>
   );
 }
@@ -226,6 +252,15 @@ export function ResultsPanel({ result, tab, onTabChange, onlyDifferences }: Resu
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState<PreviewStatusFilter>('all');
   useEffect(() => { setQuery(''); setStatus('all'); }, [result]);
+
+  // Motion 4–5: staggered KPI reveal, animated analysis bars and insight emphasis.
+  useEffect(() => {
+    if (!result || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const metrics = animate('.metric-card', { opacity: [0, 1], y: [14, 0], scale: [0.97, 1], delay: stagger(55), duration: 620, ease: 'outExpo' });
+    const bars = animate('.analysis-bar-fill', { scaleX: [0, 1], delay: stagger(65), duration: 880, ease: 'outExpo' });
+    const insight = animate('.analysis-insight', { opacity: [0.82, 1], scale: [0.99, 1], duration: 640, ease: 'outSine' });
+    return () => { metrics.pause(); bars.pause(); insight.pause(); };
+  }, [result, tab]);
   const previewSearchText = useMemo(() => {
     const index = new Map<string, string>();
     if (!result) return index;

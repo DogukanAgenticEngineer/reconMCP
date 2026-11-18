@@ -522,3 +522,23 @@
 @media (prefers-reduced-motion: reduce) {
   .connect-mcp-button, .connect-mcp-button::after { animation: none; }
 }
+
+
+/* Recon Intelligence report visuals */
+.analysis-summary { gap: 15px; }
+.analysis-card, .analysis-insight { border: 1px solid hsl(var(--border)); box-shadow: none; }
+.analysis-card-header { padding: 15px 16px 9px; }
+.analysis-card-header [data-slot="card-title"] { font-size: 13px; }
+.analysis-card-header [data-slot="card-description"] { font-size: 10px; }
+.analysis-card-content { display: grid; gap: 12px; padding: 0 16px 16px; }
+.analysis-bar-row { display: grid; gap: 6px; }
+.analysis-bar-label { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: hsl(var(--muted-foreground)); font-size: 11px; }
+.analysis-bar-label strong { color: hsl(var(--foreground)); font-variant-numeric: tabular-nums; }
+.analysis-bar-track { height: 8px; overflow: hidden; border-radius: 999px; background: hsl(var(--muted)); }
+.analysis-bar-fill { height: 100%; transform: scaleX(0); transform-origin: left center; border-radius: inherit; background: linear-gradient(90deg, #2563eb, #8b5cf6 58%, #db2777); }
+.analysis-insight { border-color: hsl(345 72% 58% / 32%); background: linear-gradient(120deg, hsl(345 72% 58% / 6%), hsl(var(--card))); }
+.analysis-insight .analysis-card-header { display: grid; justify-items: start; gap: 7px; }
+.analysis-insight .analysis-card-header [data-slot="badge"] { font-size: 9px; }
+.analysis-field-line { display: flex; justify-content: space-between; gap: 12px; color: hsl(var(--muted-foreground)); font-size: 10px; }
+.analysis-field-line strong { color: hsl(var(--foreground)); font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-motion: reduce) { .analysis-bar-fill { transform: none; } }
