@@ -1,12 +1,12 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { assertResponseSize, compareDatasets, COMPARISON_PREVIEW_LIMIT } from '../core/compare.js';
+import { assertResponseSize, compareDatasets, compareMultipleDatasets, COMPARISON_PREVIEW_LIMIT } from '../core/compare.js';
 import { resultToCsv } from '../core/report.js';
 import type { CompareOptions, ReconciliationResult } from '../core/types.js';
 import { inferFieldPairs, inferKeyPairs } from '../core/matching.js';
 import { carbonMarkdown, estimateCarbon, type CarbonEstimate } from './carbon.js';
 import { loadMcpSource } from '../sources/load-mcp.js';
-import { mcpCompareInputSchema, mcpSourceSchema, type McpCompareInput } from '../sources/mcp-schemas.js';
+import { mcpCompareInputSchema, mcpMultiCompareInputSchema, mcpSourceSchema, type McpCompareInput, type McpMultiCompareInput } from '../sources/mcp-schemas.js';
 
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
 const toolAnnotations = { readOnlyHint: true, destructiveHint: false, openWorldHint: true } as const;
@@ -296,5 +296,88 @@ export function createMcpServer(): McpServer {
 
   // Validate the source schema at server construction time so unsupported tool inputs fail early.
   void mcpSourceSchema;
+
+  server.registerTool('compare_multiple_datasets', {
+    title: 'Compare multiple datasets',
+    description: 'Compare 2–10 data sources in all pairwise combinations. Each pair uses the same key/field mapping. Returns an aggregate summary plus per-pair results with Markdown reports and a combined carbon estimate.',
+    inputSchema: mcpMultiCompareInputSchema.shape,
+    annotations: toolAnnotations,
+  }, async (args) => {
+    const startedAt = performance.now();
+    try {
+      const parsed = mcpMultiCompareInputSchema.parse(args) as McpMultiCompareInput;
+      const datasets = await Promise.all(parsed.sources.map((src) => loadMcpSource(src)));
+      let resolvedKeyPairs = parsed.keyPairs ?? [];
+      if (!resolvedKeyPairs.length) {
+        const inferred = inferFieldPairs(datasets[0]!.columns, datasets[1]!.columns);
+        resolvedKeyPairs = inferKeyPairs(inferred);
+        if (!resolvedKeyPairs.length) throw new Error('Otomatik anahtar alanı belirlenemedi. Lütfen keyPairs alanını açıkça belirtin.');
+      }
+      const multiResult = compareMultipleDatasets({
+        sources: datasets,
+        keyPairs: resolvedKeyPairs,
+        ...(parsed.fieldPairs ? { fieldPairs: parsed.fieldPairs } : {}),
+        ...(parsed.tolerance !== undefined ? { tolerance: parsed.tolerance } : {}),
+        trimWhitespace: parsed.trimWhitespace,
+        caseSensitiveKeys: parsed.caseSensitiveKeys,
+        caseSensitiveValues: parsed.caseSensitiveValues,
+      });
+      const carbonEstimate = estimateCarbon(performance.now() - startedAt, 'completed', 'compare_multiple_datasets');
+
+      const { aggregateSummary } = multiResult;
+      const lines: string[] = [
+        '# Multi-source reconciliation result',
+        '',
+        `**Sources:** ${multiResult.sources.map((s) => `\`${s}\``).join(', ')}`,
+        `**Total comparisons:** ${multiResult.totalComparisons}`,
+        '',
+        '| Metric | Total |',
+        '|:--|--:|',
+        `| Total rows across all sources | ${aggregateSummary.totalRows.toLocaleString()} |`,
+        `| Total exact matches | ${aggregateSummary.totalMatches.toLocaleString()} |`,
+        `| Total value mismatches | ${aggregateSummary.totalMismatches.toLocaleString()} |`,
+        `| Total missing records | ${aggregateSummary.totalMissing.toLocaleString()} |`,
+        `| Total duplicate key groups | ${aggregateSummary.totalDuplicates.toLocaleString()} |`,
+        `| Total schema differences | ${aggregateSummary.totalSchemaIssues.toLocaleString()} |`,
+      ];
+      if (aggregateSummary.worstPair) {
+        lines.push(`| Worst pair | \`${aggregateSummary.worstPair.leftName}\` ↔ \`${aggregateSummary.worstPair.rightName}\` (${aggregateSummary.worstPair.issueCount} issues) |`);
+      }
+      lines.push('', '## Pairwise summary', '', '| Pair | Matches | Mismatches | Missing | Duplicates |', '|:--|--:|--:|--:|--:|');
+      for (const pair of multiResult.pairwise) {
+        const { summary } = pair.result;
+        const missing = summary.missingOnLeft + summary.missingOnRight;
+        const dups = summary.duplicateKeysOnLeft + summary.duplicateKeysOnRight;
+        lines.push(`| \`${pair.leftName}\` ↔ \`${pair.rightName}\` | ${summary.matchedRows} | ${summary.valueMismatches} | ${missing} | ${dups} |`);
+      }
+      lines.push('', '---', '', carbonMarkdown(carbonEstimate));
+      const contentText = lines.join('\n');
+
+      const structured = {
+        schemaVersion: 'reconcile.multi.v1',
+        sources: multiResult.sources,
+        totalSources: multiResult.totalSources,
+        totalComparisons: multiResult.totalComparisons,
+        aggregateSummary: multiResult.aggregateSummary,
+        pairwise: multiResult.pairwise.map((pair) => ({
+          leftIndex: pair.leftIndex,
+          rightIndex: pair.rightIndex,
+          leftName: pair.leftName,
+          rightName: pair.rightName,
+          summary: pair.result.summary,
+          schema: pair.result.schema,
+          comparisonPreview: pair.result.comparisonPreview,
+          previewTruncated: pair.result.previewTruncated,
+          previewLimit: COMPARISON_PREVIEW_LIMIT,
+          markdown: pair.result.markdown,
+        })),
+        carbonEstimate,
+      };
+      return response(contentText, structured);
+    } catch (error) {
+      return failed(error, estimateCarbon(performance.now() - startedAt, 'completed', 'compare_multiple_datasets'));
+    }
+  });
+
   return server;
 }

@@ -78,3 +78,37 @@ export interface ReconciliationResult {
   previewTruncated: boolean;
   markdown: string;
 }
+
+export interface MultiReconcileOptions {
+  sources: Dataset[];
+  keyPairs: FieldPair[];
+  fieldPairs?: FieldPair[];
+  tolerance?: string;
+  trimWhitespace?: boolean;
+  caseSensitiveKeys?: boolean;
+  caseSensitiveValues?: boolean;
+}
+
+export interface PairwiseResult {
+  leftIndex: number;
+  rightIndex: number;
+  leftName: string;
+  rightName: string;
+  result: ReconciliationResult;
+}
+
+export interface MultiSourceReconciliationResult {
+  sources: string[];
+  pairwise: PairwiseResult[];
+  totalSources: number;
+  totalComparisons: number;
+  aggregateSummary: {
+    totalRows: number;
+    totalMatches: number;
+    totalMismatches: number;
+    totalMissing: number;
+    totalDuplicates: number;
+    totalSchemaIssues: number;
+    worstPair: { leftName: string; rightName: string; issueCount: number } | null;
+  };
+}

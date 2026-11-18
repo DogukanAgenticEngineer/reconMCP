@@ -12,10 +12,12 @@ interface SourceCardProps {
   onInspect: (side: Side, file: File) => void;
   onDraggingChange: (side: Side, dragging: boolean) => void;
   onSelectError: (side: Side, message: string) => void;
+  /** Optional numeric index shown instead of A/B when in multi-source mode. */
+  index?: number;
 }
 
-export function SourceCard({ side, upload, onInspect, onDraggingChange, onSelectError }: SourceCardProps) {
-  const label = side === 'left' ? 'A' : 'B';
+export function SourceCard({ side, upload, onInspect, onDraggingChange, onSelectError, index }: SourceCardProps) {
+  const label = index !== undefined ? String(index + 1) : (side === 'left' ? 'A' : 'B');
   const acceptHint = upload.file
     ? `${formatBytes(upload.file.size)} · ${upload.rowCount?.toLocaleString() ?? '—'} rows`
     : 'CSV or XLSX · max 4 MB';

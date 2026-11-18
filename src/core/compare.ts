@@ -1,5 +1,5 @@
 import Decimal from 'decimal.js';
-import type { CompareOptions, ComparisonPreviewRow, DataRow, Dataset, DuplicateGroup, FieldPair, ReconciliationResult, Scalar } from './types.js';
+import type { CompareOptions, ComparisonPreviewRow, DataRow, Dataset, DuplicateGroup, FieldPair, MultiReconcileOptions, MultiSourceReconciliationResult, PairwiseResult, ReconciliationResult, Scalar } from './types.js';
 
 Decimal.set({ precision: 80, rounding: Decimal.ROUND_HALF_EVEN });
 
@@ -305,4 +305,73 @@ export function assertResponseSize(value: unknown, maximumBytes = 2 * 1024 * 102
 export function scalarToCsv(value: Scalar): string {
   const text = value === null ? '' : String(value);
   return `"${text.replaceAll('"', '""')}"`;
+}
+
+export function compareMultipleDatasets(options: MultiReconcileOptions): MultiSourceReconciliationResult {
+  const { sources } = options;
+  if (sources.length < 2 || sources.length > 10) {
+    throw new Error('Kaynak sayısı 2 ile 10 arasında olmalıdır.');
+  }
+  for (const source of sources) {
+    if (source.rows.length > 10_000 || source.columns.length > 100) {
+      throw new Error('Kaynak, izin verilen satır veya sütun sınırını aşıyor.');
+    }
+  }
+
+  const pairwise: PairwiseResult[] = [];
+  for (let i = 0; i < sources.length; i += 1) {
+    for (let j = i + 1; j < sources.length; j += 1) {
+      const left = sources[i]!;
+      const right = sources[j]!;
+      const pairOptions: CompareOptions = {
+        keyPairs: options.keyPairs,
+        ...(options.fieldPairs ? { fieldPairs: options.fieldPairs } : {}),
+        ...(options.tolerance !== undefined ? { tolerance: options.tolerance } : {}),
+        ...(options.trimWhitespace !== undefined ? { trimWhitespace: options.trimWhitespace } : {}),
+        ...(options.caseSensitiveKeys !== undefined ? { caseSensitiveKeys: options.caseSensitiveKeys } : {}),
+        ...(options.caseSensitiveValues !== undefined ? { caseSensitiveValues: options.caseSensitiveValues } : {}),
+      };
+      const result = compareDatasets(left, right, pairOptions);
+      pairwise.push({ leftIndex: i, rightIndex: j, leftName: left.name, rightName: right.name, result });
+    }
+  }
+
+  let totalMatches = 0;
+  let totalMismatches = 0;
+  let totalMissing = 0;
+  let totalDuplicates = 0;
+  let totalSchemaIssues = 0;
+  let worstPair: { leftName: string; rightName: string; issueCount: number } | null = null;
+
+  for (const pair of pairwise) {
+    const { summary } = pair.result;
+    totalMatches += summary.matchedRows;
+    totalMismatches += summary.valueMismatches;
+    totalMissing += summary.missingOnLeft + summary.missingOnRight;
+    totalDuplicates += summary.duplicateKeysOnLeft + summary.duplicateKeysOnRight;
+    totalSchemaIssues += summary.schemaIssues;
+    const issueCount = summary.valueMismatches + summary.missingOnLeft + summary.missingOnRight
+      + summary.duplicateKeysOnLeft + summary.duplicateKeysOnRight + summary.schemaIssues;
+    if (worstPair === null || issueCount > worstPair.issueCount) {
+      worstPair = { leftName: pair.leftName, rightName: pair.rightName, issueCount };
+    }
+  }
+
+  const totalRows = sources.reduce((sum, s) => sum + s.rows.length, 0);
+
+  return {
+    sources: sources.map((s) => s.name),
+    pairwise,
+    totalSources: sources.length,
+    totalComparisons: pairwise.length,
+    aggregateSummary: {
+      totalRows,
+      totalMatches,
+      totalMismatches,
+      totalMissing,
+      totalDuplicates,
+      totalSchemaIssues,
+      worstPair: worstPair?.issueCount === 0 ? null : worstPair,
+    },
+  };
 }

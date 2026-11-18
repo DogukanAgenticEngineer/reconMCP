@@ -1,9 +1,9 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { compareDatasets, assertResponseSize } from '../core/compare.js';
+import { compareDatasets, assertResponseSize, compareMultipleDatasets } from '../core/compare.js';
 import { resultToCsv } from '../core/report.js';
 import type { CompareOptions } from '../core/types.js';
 import { loadSource } from '../sources/load.js';
-import { compareOptionsSchema, reconcileRequestSchema, sourceDefinitionSchema } from '../sources/schemas.js';
+import { compareOptionsSchema, multiReconcileRequestSchema, reconcileRequestSchema, sourceDefinitionSchema } from '../sources/schemas.js';
 import { readJsonBody, readMultipartBody } from './body.js';
 
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
@@ -24,6 +24,7 @@ function safeMessage(error: unknown): string {
     'Bağlantı hedefi ', 'Bağlantı hedefinin ', 'Özel ağ ', 'Harici REST ', 'PostgreSQL ',
     'İstek ', 'Multipart ', 'Dosya alanı ', 'Multipart alanı ', 'Multipart içerik ',
     'Sonuç ', 'Geçersiz ', 'Kaynakta ', 'XLSX arşivi ', 'REST yanıtı ',
+    'Kaynak sayısı ',
   ];
   return safePrefixes.some((prefix) => message.startsWith(prefix)) ? message : 'İstek işlenemedi. Girdi biçimini ve bağlantı izinlerini kontrol edin.';
 }
@@ -65,6 +66,24 @@ async function compare(input: unknown, files: Map<string, Buffer>): Promise<unkn
   return response;
 }
 
+async function multiCompare(input: unknown, files: Map<string, Buffer>): Promise<unknown> {
+  const request = multiReconcileRequestSchema.parse(input);
+  const datasets = await Promise.all(
+    request.sources.map((sourceDef, index) => loadSource(sourceDef, files.get(`fileSource_${index}`))),
+  );
+  const result = compareMultipleDatasets({
+    sources: datasets,
+    keyPairs: request.keyPairs,
+    ...(request.fieldPairs ? { fieldPairs: request.fieldPairs } : {}),
+    ...(request.tolerance ? { tolerance: request.tolerance } : {}),
+    trimWhitespace: request.trimWhitespace,
+    caseSensitiveKeys: request.caseSensitiveKeys,
+    caseSensitiveValues: request.caseSensitiveValues,
+  });
+  assertResponseSize(result, MAX_RESPONSE_BYTES);
+  return result;
+}
+
 export async function handleReconcileRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
   res.setHeader('Cache-Control', 'no-store, max-age=0');
   res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -88,6 +107,22 @@ export async function handleReconcileRequest(req: IncomingMessage, res: ServerRe
         json(res, 200, result);
         return;
       }
+      if (mode === 'multi-compare') {
+        const sources = parseField(multipart.fields, 'sources');
+        const multiPayload = {
+          sources,
+          keyPairs: parseField(multipart.fields, 'keyPairs'),
+          ...(multipart.fields.fieldPairs ? { fieldPairs: parseField(multipart.fields, 'fieldPairs') } : {}),
+          ...(multipart.fields.tolerance ? { tolerance: multipart.fields.tolerance } : {}),
+          trimWhitespace: multipart.fields.trimWhitespace !== 'false',
+          caseSensitiveKeys: multipart.fields.caseSensitiveKeys !== 'false',
+          caseSensitiveValues: multipart.fields.caseSensitiveValues !== 'false',
+        };
+        if (Date.now() - started > 14_000) throw new Error('İşlem 15 saniye sınırını aşıyor.');
+        const multiResult = await multiCompare(multiPayload, files);
+        json(res, 200, multiResult);
+        return;
+      }
       if (mode !== 'compare') throw new Error('İstek modu desteklenmiyor.');
       payload = {
         left: parseField(multipart.fields, 'left'),
@@ -105,6 +140,12 @@ export async function handleReconcileRequest(req: IncomingMessage, res: ServerRe
       if (record.mode === 'inspect') {
         const result = await inspect(record.source, undefined);
         json(res, 200, result);
+        return;
+      }
+      if (record.mode === 'multi-compare') {
+        if (Date.now() - started > 14_000) throw new Error('İşlem 15 saniye sınırını aşıyor.');
+        const multiResult = await multiCompare(record, new Map());
+        json(res, 200, multiResult);
         return;
       }
     } else {
