@@ -366,7 +366,14 @@ function App(): ReactElement {
 
   return (
     <div className={`theme-root ${appearance === 'dark' ? 'dark' : ''}`}>
-      <DitherField isDark={appearance === 'dark'} className="dither-bg" />
+      <DitherField
+        pattern="horizon"
+        color={appearance === 'dark'
+          ? ['#082f49', '#38bdf8', '#dff6ff']
+          : ['#e0f7ff', '#7dd3fc', '#0e7490']}
+        isDark={appearance === 'dark'}
+        className="dither-bg"
+      />
       <Pointer />
       <OnboardingDialog />
       <div className="app-shell dashboard-page" id="app-top">

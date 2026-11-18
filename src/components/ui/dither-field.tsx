@@ -8,12 +8,33 @@ const BAYER4 = [
   15,  7, 13,  5,
 ];
 
+type DitherPattern = "organic" | "horizon";
+
 interface DitherFieldProps {
   className?: string;
   isDark?: boolean;
+  pattern?: DitherPattern;
+  color?: [string, string, string];
 }
 
-export function DitherField({ className, isDark = false }: DitherFieldProps) {
+const DEFAULT_LIGHT_COLORS: [string, string, string] = ["#e0f7ff", "#7dd3fc", "#0e7490"];
+const DEFAULT_DARK_COLORS: [string, string, string] = ["#082f49", "#38bdf8", "#dff6ff"];
+
+function hexToRgb(hex: string): [number, number, number] {
+  const normalized = hex.replace("#", "");
+  const value = normalized.length === 3
+    ? normalized.split("").map((part) => `${part}${part}`).join("")
+    : normalized;
+  const parsed = Number.parseInt(value, 16);
+  return [(parsed >> 16) & 255, (parsed >> 8) & 255, parsed & 255];
+}
+
+export function DitherField({
+  className,
+  isDark = false,
+  pattern = "organic",
+  color,
+}: DitherFieldProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef = useRef<number | null>(null);
   const tRef = useRef(0);
@@ -31,9 +52,7 @@ export function DitherField({ className, isDark = false }: DitherFieldProps) {
 
     const imageData = ctx.createImageData(W, H);
     const data = imageData.data;
-
-    // Colors: dark mode uses near-white grain, light uses near-black grain
-    const grain = isDark ? 220 : 30;
+    const palette = (color ?? (isDark ? DEFAULT_DARK_COLORS : DEFAULT_LIGHT_COLORS)).map(hexToRgb);
 
     const draw = () => {
       tRef.current += 0.018;
@@ -41,30 +60,35 @@ export function DitherField({ className, isDark = false }: DitherFieldProps) {
 
       for (let y = 0; y < H; y++) {
         for (let x = 0; x < W; x++) {
-          // Animated noise: combine multiple sine waves for organic feel
           const nx = x / W;
           const ny = y / H;
-          const noise =
-            Math.sin(nx * 6.3 + t) * 0.25 +
-            Math.sin(ny * 5.7 - t * 0.8) * 0.25 +
-            Math.sin((nx + ny) * 4.1 + t * 1.3) * 0.25 +
-            Math.sin((nx - ny) * 3.9 - t * 0.5) * 0.25;
+          const noise = pattern === "horizon"
+            ? Math.sin(ny * 10.5 - t * 0.7) * 0.42
+              + Math.sin(nx * 3.2 + t * 0.35) * 0.18
+              + Math.sin((nx + ny) * 5.2 + t) * 0.16
+              + Math.sin((nx - ny) * 3.4 - t * 0.45) * 0.12
+            : Math.sin(nx * 6.3 + t) * 0.25
+              + Math.sin(ny * 5.7 - t * 0.8) * 0.25
+              + Math.sin((nx + ny) * 4.1 + t * 1.3) * 0.25
+              + Math.sin((nx - ny) * 3.9 - t * 0.5) * 0.25;
 
-          // Map noise from [-1,1] to [0,1]
-          const value = (noise + 1) / 2;
-
-          // Apply Bayer ordered dithering
+          const value = Math.min(0.999, Math.max(0, (noise + 1) / 2));
           const bx = x % 4;
           const by = y % 4;
           const threshold = (BAYER4[by * 4 + bx]! + 0.5) / 16;
-          const dithered = value > threshold ? 1 : 0;
-
+          const dithered = value > threshold;
           const idx = (y * W + x) * 4;
-          const c = dithered ? grain : 0;
-          data[idx] = c;
-          data[idx + 1] = c;
-          data[idx + 2] = c;
-          data[idx + 3] = dithered ? 255 : 0;
+
+          if (!dithered) {
+            data[idx + 3] = 0;
+            continue;
+          }
+
+          const shade = value > 0.68 ? palette[2]! : value > 0.36 ? palette[1]! : palette[0]!;
+          data[idx] = shade[0];
+          data[idx + 1] = shade[1];
+          data[idx + 2] = shade[2];
+          data[idx + 3] = isDark ? 210 : 190;
         }
       }
 
@@ -77,7 +101,7 @@ export function DitherField({ className, isDark = false }: DitherFieldProps) {
     return () => {
       if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
     };
-  }, [isDark]);
+  }, [color, isDark, pattern]);
 
   return (
     <canvas
