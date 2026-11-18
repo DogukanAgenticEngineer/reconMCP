@@ -67,7 +67,16 @@ describe('MCP Streamable HTTP protocol', () => {
     expect(result.isError).not.toBe(true);
     const structured = result.structuredContent as {
       schemaVersion: string;
-      presentation: { status: string; metricCards: Array<{ label: string; value: number }>; comparisonPreview: Array<{ status: string }> };
+      presentation: {
+        status: string;
+        metricCards: Array<{ label: string; value: number }>;
+        comparisonPreview: Array<{ status: string }>;
+        charts: {
+          statusDistribution: { type: string; labels: string[]; values: number[] };
+          findingsByCategory: { type: string; labels: string[]; values: number[] };
+          mismatchesByField: { type: string; labels: string[]; values: number[] };
+        };
+      };
       summary: { valueMismatches: number; matchedKeys: number; mismatchedRows: number };
       comparisonPreview: Array<{ status: string }>;
       mismatches: unknown[];
@@ -80,6 +89,11 @@ describe('MCP Streamable HTTP protocol', () => {
     expect(structured.summary.mismatchedRows).toBe(1);
     expect(structured.comparisonPreview[0]?.status).toBe('mismatch');
     expect(structured.presentation.comparisonPreview[0]?.status).toBe('mismatch');
+    expect(structured.presentation.charts.statusDistribution.type).toBe('pie');
+    expect(structured.presentation.charts.statusDistribution.values).toEqual([0, 1, 1, 0]);
+    expect(structured.presentation.charts.findingsByCategory.type).toBe('bar');
+    expect(structured.presentation.charts.mismatchesByField.labels).toEqual(['amount']);
+    expect(structured.presentation.charts.mismatchesByField.values).toEqual([1]);
     expect(structured.mismatches).toHaveLength(1);
     expect((structured as typeof structured & { carbonEstimate: { phase: string; estimatedGramsCO2: number } }).carbonEstimate.phase).toBe('completed');
     expect((structured as typeof structured & { carbonEstimate: { phase: string; estimatedGramsCO2: number } }).carbonEstimate.estimatedGramsCO2).toBeGreaterThanOrEqual(0);
