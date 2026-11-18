@@ -75,9 +75,10 @@ describe('source security boundaries', () => {
     expect(read('app.config.ts')).toContain('.png');
     expect(read('src/ui/ResultsPanel.tsx')).toContain('<Tabs');
     expect(read('src/ui/ResultsPanel.tsx')).toContain('AnalyticsReport');
-    expect(read('src/ui/AnalyticsReport.tsx')).toContain("type: 'scatter3d'");
-    expect(read('src/ui/AnalyticsReport.tsx')).toContain("type: 'surface'");
-    expect(read('src/ui/AnalyticsReport.tsx')).toContain('cumulativePercent');
+    expect(read('src/ui/AnalyticsReport.tsx')).toContain('function buildAnalytics');
+    expect(read('src/ui/AnalyticsReport.tsx')).toContain('Adaptive statistical analytics');
+    expect(read('src/ui/AnalyticsReport.tsx')).not.toContain("type: 'surface'");
+    expect(read('vercel.json')).toContain("script-src 'self' https://cdn.plot.ly");
     expect(read('index.html')).toContain('cdn.plot.ly/plotly-');
     expect(read('src/ui/SourceCard.tsx')).toMatch(/onDrop=/);
     expect(read('src/ui/SourceCard.tsx')).toContain('<Alert');
