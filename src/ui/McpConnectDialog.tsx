@@ -4,6 +4,7 @@ import { Check, Copy } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert.js';
 import { Badge } from '@/components/ui/badge.js';
 import { Button } from '@/components/ui/button.js';
+import { RainbowButton } from '@/components/ui/rainbow-button.js';
 import {
   Dialog,
   DialogContent,
@@ -50,7 +51,7 @@ export function McpConnectDialog({ endpoint }: { endpoint: string }): ReactEleme
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button type="button" variant="outline" className="connect-button">CONNECT MCP</Button>
+        <RainbowButton type="button" variant="outline" className="connect-mcp-button">CONNECT MCP</RainbowButton>
       </DialogTrigger>
       <DialogContent className="mcp-dialog">
         <DialogHeader>
