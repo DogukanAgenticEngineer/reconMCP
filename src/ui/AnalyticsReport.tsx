@@ -20,8 +20,8 @@ interface AnalyticsReportProps { result: ReconciliationResult }
 
 const number = (value: number): string => value.toLocaleString(undefined, { maximumFractionDigits: 2 });
 const compactKey = (value: string): string => value.length > 42 ? `${value.slice(0, 39)}…` : value;
-const HTML_ENTITIES: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', "'": '&#39;' };
-const escapeHtml = (value: string): string => value.replace(/[&<>\"']/g, (character) => HTML_ENTITIES[character] ?? character);
+const HTML_ENTITIES: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+const escapeHtml = (value: string): string => value.replace(/[&<>"']/g, (character) => HTML_ENTITIES[character] ?? character);
 
 export function AnalyticsReport({ result }: AnalyticsReportProps): ReactElement {
   const [plotlyReady, setPlotlyReady] = useState(Boolean(window.Plotly));
