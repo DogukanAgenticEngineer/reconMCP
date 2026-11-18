@@ -48,26 +48,46 @@ function markdownCell(value: unknown, maximum = 140): string {
   return `${delimiter}${padding}${body}${padding}${delimiter}`;
 }
 
-function groups(dataset: Dataset, pairs: FieldPair[], side: 'left' | 'right', options: KeyOptions): Map<string, DataRow[]> {
-  const map = new Map<string, DataRow[]>();
+interface RowGroup {
+  first: DataRow;
+  count: number;
+  duplicates?: DataRow[];
+}
+
+type RowIndex = Map<string, RowGroup>;
+
+function groups(dataset: Dataset, pairs: FieldPair[], side: 'left' | 'right', options: KeyOptions): RowIndex {
+  const map: RowIndex = new Map();
   for (const row of dataset.rows) {
     const key = keyOf(row, pairs, side, options);
     const found = map.get(key);
-    if (found) found.push(row);
-    else map.set(key, [row]);
+    if (found) {
+      if (found.count === 1) found.duplicates = [found.first, row];
+      else found.duplicates?.push(row);
+      found.count += 1;
+    } else {
+      map.set(key, { first: row, count: 1 });
+    }
   }
   return map;
 }
 
-function duplicateGroups(index: Map<string, DataRow[]>, pairs: FieldPair[], side: 'left' | 'right'): DuplicateGroup[] {
+function duplicateGroups(index: RowIndex, pairs: FieldPair[], side: 'left' | 'right'): DuplicateGroup[] {
   const results: DuplicateGroup[] = [];
-  for (const rows of index.values()) {
-    if (rows.length < 2) continue;
-    const first = rows[0];
-    if (!first) continue;
-    results.push({ key: keyDisplay(first, pairs, side), count: rows.length, records: rows });
+  for (const group of index.values()) {
+    if (group.count < 2) continue;
+    results.push({
+      key: keyDisplay(group.first, pairs, side),
+      count: group.count,
+      records: group.duplicates ?? [group.first],
+    });
   }
   return results;
+}
+
+function appendGroupRows(target: DataRow[], group: RowGroup): void {
+  if (group.duplicates) target.push(...group.duplicates);
+  else target.push(group.first);
 }
 
 function numeric(value: Scalar): Decimal | null {
@@ -155,17 +175,6 @@ function ensureColumns(dataset: Dataset, pairs: FieldPair[], side: 'left' | 'rig
   if (missing.length > 0) throw new Error(`${label} kaynağında eşlenen alan bulunamadı.`);
 }
 
-function addPreview(
-  rows: ComparisonPreviewRow[],
-  key: string,
-  status: ComparisonPreviewRow['status'],
-  leftRows: number,
-  rightRows: number,
-  mismatchFields = 0,
-): void {
-  rows.push({ key, status, leftRows, rightRows, mismatchFields });
-}
-
 export function compareDatasets(left: Dataset, right: Dataset, input: CompareOptions): ReconciliationResult {
   if (left.rows.length > 10_000 || right.rows.length > 10_000 || left.columns.length > 100 || right.columns.length > 100) {
     throw new Error('Kaynak, izin verilen satır veya sütun sınırını aşıyor.');
@@ -192,8 +201,8 @@ export function compareDatasets(left: Dataset, right: Dataset, input: CompareOpt
   const rightDuplicates = duplicateGroups(rightIndex, input.keyPairs, 'right');
   const onlyOnLeft: DataRow[] = [];
   const onlyOnRight: DataRow[] = [];
-  for (const [key, rows] of leftIndex) if (!rightIndex.has(key)) onlyOnLeft.push(...rows);
-  for (const [key, rows] of rightIndex) if (!leftIndex.has(key)) onlyOnRight.push(...rows);
+  for (const [key, group] of leftIndex) if (!rightIndex.has(key)) appendGroupRows(onlyOnLeft, group);
+  for (const [key, group] of rightIndex) if (!leftIndex.has(key)) appendGroupRows(onlyOnRight, group);
 
   const tolerance = new Decimal(input.tolerance ?? '0');
   const mismatches: ReconciliationResult['mismatches'] = [];
@@ -201,12 +210,11 @@ export function compareDatasets(left: Dataset, right: Dataset, input: CompareOpt
   let matchedKeys = 0;
   let matchedRows = 0;
   let mismatchedRows = 0;
-  for (const [key, leftRows] of leftIndex) {
-    const rightRows = rightIndex.get(key);
-    if (!rightRows || leftRows.length !== 1 || rightRows.length !== 1) continue;
-    const leftRow = leftRows[0];
-    const rightRow = rightRows[0];
-    if (!leftRow || !rightRow) continue;
+  for (const [key, leftGroup] of leftIndex) {
+    const rightGroup = rightIndex.get(key);
+    if (!rightGroup || leftGroup.count !== 1 || rightGroup.count !== 1) continue;
+    const leftRow = leftGroup.first;
+    const rightRow = rightGroup.first;
     matchedKeys += 1;
     let rowMismatches = 0;
     for (const pair of fieldPairs) {
@@ -223,33 +231,38 @@ export function compareDatasets(left: Dataset, right: Dataset, input: CompareOpt
     }
   }
 
-  const allComparisonPreview: ComparisonPreviewRow[] = [];
-  for (const [key, leftRows] of leftIndex) {
-    const rightRows = rightIndex.get(key);
-    const first = leftRows[0];
-    if (!first) continue;
-    const display = displayKey(keyDisplay(first, input.keyPairs, 'left'));
-    if (!rightRows) {
-      addPreview(allComparisonPreview, display, leftRows.length > 1 ? 'duplicate' : 'only_left', leftRows.length, 0);
-    } else if (leftRows.length > 1 || rightRows.length > 1) {
-      addPreview(allComparisonPreview, display, 'duplicate', leftRows.length, rightRows.length);
+  // Keep only the bounded preview in memory; non-matches retain priority over matches.
+  const issuePreview: ComparisonPreviewRow[] = [];
+  const matchPreview: ComparisonPreviewRow[] = [];
+  let previewGroupCount = 0;
+  const addBoundedPreview = (row: ComparisonPreviewRow): void => {
+    previewGroupCount += 1;
+    const target = row.status === 'match' ? matchPreview : issuePreview;
+    if (target.length < COMPARISON_PREVIEW_LIMIT) target.push(row);
+  };
+  for (const [key, leftGroup] of leftIndex) {
+    const rightGroup = rightIndex.get(key);
+    const display = displayKey(keyDisplay(leftGroup.first, input.keyPairs, 'left'));
+    if (!rightGroup) {
+      addBoundedPreview({ key: display, status: leftGroup.count > 1 ? 'duplicate' : 'only_left', leftRows: leftGroup.count, rightRows: 0, mismatchFields: 0 });
+    } else if (leftGroup.count > 1 || rightGroup.count > 1) {
+      addBoundedPreview({ key: display, status: 'duplicate', leftRows: leftGroup.count, rightRows: rightGroup.count, mismatchFields: 0 });
     } else {
       const mismatchFields = mismatchesByKey.get(key) ?? 0;
-      addPreview(allComparisonPreview, display, mismatchFields > 0 ? 'mismatch' : 'match', 1, 1, mismatchFields);
+      addBoundedPreview({ key: display, status: mismatchFields > 0 ? 'mismatch' : 'match', leftRows: 1, rightRows: 1, mismatchFields });
     }
   }
-  for (const [key, rightRows] of rightIndex) {
+  for (const [key, rightGroup] of rightIndex) {
     if (leftIndex.has(key)) continue;
-    const first = rightRows[0];
-    if (!first) continue;
-    addPreview(allComparisonPreview, displayKey(keyDisplay(first, input.keyPairs, 'right')), rightRows.length > 1 ? 'duplicate' : 'only_right', 0, rightRows.length);
+    addBoundedPreview({
+      key: displayKey(keyDisplay(rightGroup.first, input.keyPairs, 'right')),
+      status: rightGroup.count > 1 ? 'duplicate' : 'only_right',
+      leftRows: 0,
+      rightRows: rightGroup.count,
+      mismatchFields: 0,
+    });
   }
-
-  const comparisonPreview = [
-    ...allComparisonPreview.filter((row) => row.status !== 'match'),
-    ...allComparisonPreview.filter((row) => row.status === 'match'),
-  ].slice(0, COMPARISON_PREVIEW_LIMIT);
-  const previewGroupCount = leftIndex.size + [...rightIndex.keys()].filter((key) => !leftIndex.has(key)).length;
+  const comparisonPreview = [...issuePreview, ...matchPreview].slice(0, COMPARISON_PREVIEW_LIMIT);
   const leftColumnSet = new Set(left.columns);
   const rightColumnSet = new Set(right.columns);
   const schema = {
