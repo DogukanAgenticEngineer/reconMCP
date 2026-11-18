@@ -584,3 +584,5 @@
 @media (prefers-reduced-motion: reduce) {
   .analytics-report-header, .analytics-chart-card { animation: none !important; transition: none !important; }
 }
+
+.analytics-chart-empty { display: grid; place-items: center; min-height: 220px; padding: 24px; color: hsl(var(--muted-foreground)); text-align: center; font-size: 12px; }
