@@ -87,7 +87,7 @@ function App(): ReactElement {
     const button = document.querySelector('.run-button');
     if (!button) return;
     const pulse = animate(button, { scale: [1, 1.025, 1], duration: 920, ease: 'inOutSine', loop: true });
-    return () => pulse.pause();
+    return () => { pulse.pause(); };
   }, [working]);
 
   useEffect(() => {
