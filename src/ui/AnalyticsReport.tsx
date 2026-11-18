@@ -1,35 +1,151 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactElement } from 'react';
-import { animate, stagger } from 'animejs';
 import { Activity, BarChart3, Boxes, ChartNoAxesCombined, Layers3 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge.js';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card.js';
-import type { ReconciliationResult } from '../core/types.js';
+import type { ReconciliationResult, Scalar } from '../core/types.js';
 
-type PlotTrace = Record<string, unknown>;
+type Trace = Record<string, unknown>;
 interface PlotlyApi {
-  newPlot(target: HTMLElement, data: PlotTrace[], layout: Record<string, unknown>, config: Record<string, unknown>): Promise<unknown>;
+  newPlot(target: HTMLElement, data: Trace[], layout: Record<string, unknown>, config: Record<string, unknown>): Promise<unknown>;
   purge(target: HTMLElement): void;
   Plots: { resize(target: HTMLElement): void };
 }
-declare global {
-  interface Window { Plotly?: PlotlyApi }
-}
+declare global { interface Window { Plotly?: PlotlyApi } }
 
 interface AnalyticsReportProps { result: ReconciliationResult }
+interface ChartModel { title: string; method: string; description: string; data: Trace[]; layout?: Record<string, unknown>; empty?: string }
+interface ProfileRow { source: 'A' | 'B'; row: Record<string, Scalar> }
 
-const number = (value: number): string => value.toLocaleString(undefined, { maximumFractionDigits: 2 });
-const compactKey = (value: string): string => value.length > 42 ? `${value.slice(0, 39)}…` : value;
-const HTML_ENTITIES: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
-const escapeHtml = (value: string): string => value.replace(/[&<>"']/g, (character) => HTML_ENTITIES[character] ?? character);
+const fmt = (value: number): string => value.toLocaleString(undefined, { maximumFractionDigits: 2 });
+const numeric = (value: Scalar): number | null => {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value !== 'string' || !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(value.trim())) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+const text = (value: Scalar): string => value === null ? '(null)' : String(value);
+const fieldName = (item: ReconciliationResult['mismatches'][number]): string =>
+  item.leftField === item.rightField ? item.leftField : `${item.leftField} → ${item.rightField}`;
+
+function buildAnalytics(result: ReconciliationResult): { charts: ChartModel[]; mismatchCount: number; fieldCount: number; numericCount: number; profileCount: number } {
+  const fieldCounts = new Map<string, number>();
+  const numericPairs: Array<{ left: number; right: number; delta: number; field: string }> = [];
+  const transitions = new Map<string, number>();
+  for (const item of result.mismatches) {
+    const field = fieldName(item);
+    fieldCounts.set(field, (fieldCounts.get(field) ?? 0) + 1);
+    const left = numeric(item.leftValue);
+    const right = numeric(item.rightValue);
+    if (left !== null && right !== null) numericPairs.push({ left, right, delta: Math.abs(left - right), field });
+    else {
+      const label = `${text(item.leftValue)} → ${text(item.rightValue)}`;
+      transitions.set(label, (transitions.get(label) ?? 0) + 1);
+    }
+  }
+
+  const profileRows: ProfileRow[] = [
+    ...result.missing.onlyOnLeft.map((row) => ({ source: 'A' as const, row })),
+    ...result.missing.onlyOnRight.map((row) => ({ source: 'B' as const, row })),
+    ...result.duplicates.left.flatMap((group) => group.records.map((row) => ({ source: 'A' as const, row }))),
+    ...result.duplicates.right.flatMap((group) => group.records.map((row) => ({ source: 'B' as const, row }))),
+  ];
+  const columns = [...new Set(profileRows.flatMap(({ row }) => Object.keys(row)))];
+  const numericFields = columns.map((field) => ({
+    field,
+    values: profileRows.map(({ row }) => numeric(row[field] ?? null)),
+  })).filter(({ values }) => values.filter((value) => value !== null).length >= 3);
+  const qualityLabels = ['Missing records', 'Duplicate groups', 'Schema-only fields'];
+  const qualityA = [result.missing.onlyOnRight.length, result.duplicates.left.length, result.schema.onlyOnLeft.length];
+  const qualityB = [result.missing.onlyOnLeft.length, result.duplicates.right.length, result.schema.onlyOnRight.length];
+
+  const ranked = [...fieldCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 12);
+  let running = 0;
+  const cumulative = ranked.map(([, count]) => {
+    running += count;
+    return result.mismatches.length ? running / result.mismatches.length * 100 : 0;
+  });
+  const transitionTop = [...transitions.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);
+  const charts: ChartModel[] = [
+    {
+      title: result.mismatches.length ? 'Mismatch impact' : 'Structural quality',
+      method: result.mismatches.length ? 'Pareto analysis' : 'Source comparison',
+      description: result.mismatches.length ? 'Fields ranked by contribution; line shows cumulative share.' : 'Missing records, duplicate groups and schema-only fields by source.',
+      data: result.mismatches.length ? [
+        { type: 'bar', name: 'Differences', x: ranked.map(([field]) => field), y: ranked.map(([, count]) => count), hovertemplate: '%{x}<br>%{y} differences<extra></extra>' },
+        { type: 'scatter', name: 'Cumulative share', x: ranked.map(([field]) => field), y: cumulative, yaxis: 'y2', mode: 'lines+markers', hovertemplate: '%{y:.1f}%<extra></extra>' },
+      ] : [
+        { type: 'bar', name: 'Source A', x: qualityLabels, y: qualityA },
+        { type: 'bar', name: 'Source B', x: qualityLabels, y: qualityB },
+      ],
+      layout: result.mismatches.length ? { yaxis2: { title: 'Cumulative %', overlaying: 'y', side: 'right', range: [0, 105], ticksuffix: '%' }, legend: { orientation: 'h' } } : { barmode: 'group', legend: { orientation: 'h' } },
+      empty: 'No mismatches or structural differences were found.',
+    },
+    {
+      title: numericPairs.length ? 'Numeric difference distribution' : transitionTop.length ? 'Categorical transitions' : 'Numeric field profile',
+      method: numericPairs.length ? 'Histogram' : transitionTop.length ? 'Frequency distribution' : 'Adaptive field profiling',
+      description: numericPairs.length ? 'Absolute A/B deltas for numeric mismatches.' : transitionTop.length ? 'Most frequent non-numeric value transitions.' : 'Distribution of available numeric values in missing and duplicate records.',
+      data: numericPairs.length ? [
+        { type: 'histogram', name: 'Absolute delta', x: numericPairs.map((pair) => pair.delta), nbinsx: 24, opacity: 0.82 },
+      ] : transitionTop.length ? [
+        { type: 'bar', x: transitionTop.map(([label]) => label), y: transitionTop.map(([, count]) => count) },
+      ] : numericFields.length ? [
+        ...(['A', 'B'] as const).map((source) => ({
+          type: 'histogram', name: `Source ${source}`,
+          x: profileRows.filter((entry) => entry.source === source).map(({ row }) => numeric(row[numericFields[0]?.field ?? ''] ?? null)).filter((value): value is number => value !== null),
+          opacity: 0.65,
+        })),
+      ] : [],
+      layout: { barmode: 'overlay', xaxis: { title: numericPairs.length ? 'Absolute difference' : 'Value transition' }, yaxis: { title: 'Frequency' }, legend: { orientation: 'h' } },
+      empty: 'There are not enough numeric or categorical observations to estimate a distribution.',
+    },
+    {
+      title: numericPairs.length >= 2 ? 'Source value relationship' : 'Mismatch composition',
+      method: numericPairs.length >= 5 && new Set(numericPairs.map((pair) => pair.delta)).size > 1 ? '3D scatter · A / B / absolute delta' : numericPairs.length >= 2 ? '2D scatter · A vs B' : 'Categorical frequency',
+      description: numericPairs.length >= 2 ? 'Each point is an actual numeric mismatch; the diagonal represents equality.' : 'Observed non-numeric value transitions, not generated sample data.',
+      data: numericPairs.length >= 5 && new Set(numericPairs.map((pair) => pair.delta)).size > 1 ? [
+        { type: 'scatter3d', mode: 'markers', x: numericPairs.map((pair) => pair.left), y: numericPairs.map((pair) => pair.right), z: numericPairs.map((pair) => pair.delta), text: numericPairs.map((pair) => pair.field), marker: { size: 4, opacity: 0.8, color: numericPairs.map((pair) => pair.delta), colorscale: 'Viridis' }, hovertemplate: 'A: %{x}<br>B: %{y}<br>|Δ|: %{z}<br>%{text}<extra></extra>' },
+      ] : numericPairs.length >= 2 ? [
+        { type: 'scatter', mode: 'markers', x: numericPairs.map((pair) => pair.left), y: numericPairs.map((pair) => pair.right), text: numericPairs.map((pair) => pair.field), hovertemplate: 'A: %{x}<br>B: %{y}<br>%{text}<extra></extra>' },
+        { type: 'scatter', mode: 'lines', x: numericPairs.length ? [Math.min(...numericPairs.map((pair) => pair.left)), Math.max(...numericPairs.map((pair) => pair.left))] : [], y: numericPairs.length ? [Math.min(...numericPairs.map((pair) => pair.left)), Math.max(...numericPairs.map((pair) => pair.left))] : [], name: 'Equality line', hoverinfo: 'skip' },
+      ] : transitionTop.length ? [
+        { type: 'bar', x: transitionTop.map(([label]) => label), y: transitionTop.map(([, count]) => count) },
+      ] : [],
+      layout: numericPairs.length >= 5 && new Set(numericPairs.map((pair) => pair.delta)).size > 1
+        ? { scene: { xaxis: { title: 'Source A' }, yaxis: { title: 'Source B' }, zaxis: { title: 'Absolute delta' } } }
+        : { xaxis: { title: 'Source A' }, yaxis: { title: 'Source B' } },
+      empty: 'No numeric pairs or categorical transitions are available for this comparison.',
+    },
+    {
+      title: numericFields.length >= 3 ? 'Multivariate record profile' : 'Data quality by source',
+      method: numericFields.length >= 3 && profileRows.length >= 3 ? '3D multivariate scatter' : numericFields.length >= 2 && profileRows.length >= 3 ? '2D numeric relationship' : 'Grouped quality metrics',
+      description: numericFields.length >= 2 && profileRows.length >= 3 ? 'Uses observed numeric columns from missing and duplicate records only.' : 'Shows the structural differences that remain meaningful for any schema.',
+      data: numericFields.length >= 3 && profileRows.length >= 3 ? [
+        { type: 'scatter3d', mode: 'markers', x: numericFields[0]?.values.map((value) => value ?? null), y: numericFields[1]?.values.map((value) => value ?? null), z: numericFields[2]?.values.map((value) => value ?? null), text: profileRows.map(({ source }) => `Source ${source}`), marker: { size: 4, opacity: 0.75 }, hovertemplate: 'X: %{x}<br>Y: %{y}<br>Z: %{z}<br>%{text}<extra></extra>' },
+      ] : numericFields.length >= 2 && profileRows.length >= 3 ? [
+        { type: 'scatter', mode: 'markers', x: numericFields[0]?.values.map((value) => value ?? null), y: numericFields[1]?.values.map((value) => value ?? null), text: profileRows.map(({ source }) => `Source ${source}`), hovertemplate: '%{text}<br>X: %{x}<br>Y: %{y}<extra></extra>' },
+      ] : [
+        { type: 'bar', name: 'Source A', x: qualityLabels, y: qualityA },
+        { type: 'bar', name: 'Source B', x: qualityLabels, y: qualityB },
+      ],
+      layout: { barmode: 'group', scene: { xaxis: { title: numericFields[0]?.field ?? 'X' }, yaxis: { title: numericFields[1]?.field ?? 'Y' }, zaxis: { title: numericFields[2]?.field ?? 'Z' } } },
+      empty: 'No structural differences or multivariate observations are available.',
+    },
+  ];
+
+  return {
+    charts,
+    mismatchCount: result.mismatches.length,
+    fieldCount: fieldCounts.size,
+    numericCount: numericPairs.length,
+    profileCount: profileRows.length,
+  };
+}
 
 export function AnalyticsReport({ result }: AnalyticsReportProps): ReactElement {
   const [plotlyReady, setPlotlyReady] = useState(Boolean(window.Plotly));
-  const scatterRef = useRef<HTMLDivElement>(null);
-  const surfaceRef = useRef<HTMLDivElement>(null);
-  const paretoRef = useRef<HTMLDivElement>(null);
-  const divergingRef = useRef<HTMLDivElement>(null);
-  const plotRefs = useMemo(() => [scatterRef, surfaceRef, paretoRef, divergingRef], []);
+  const nodes = useRef<Array<HTMLDivElement | null>>([]);
+  const analysis = useMemo(() => buildAnalytics(result), [result]);
 
   useEffect(() => {
     if (window.Plotly) { setPlotlyReady(true); return; }
@@ -39,195 +155,61 @@ export function AnalyticsReport({ result }: AnalyticsReportProps): ReactElement 
     return () => script?.removeEventListener('load', onLoad);
   }, []);
 
-  const analysis = useMemo(() => {
-    const fieldCounts = new Map<string, number>();
-    const keyIndexes = new Map<string, number>();
-    const scatterX: number[] = [];
-    const scatterY: number[] = [];
-    const scatterZ: number[] = [];
-    const scatterText: string[] = [];
-    const surfaceFields = new Map<string, number>();
-    const bucketCount = 20;
-    const surface = new Map<string, number[]>();
-
-    result.mismatches.forEach((item, index) => {
-      const field = item.leftField === item.rightField ? item.leftField : `${item.leftField} → ${item.rightField}`;
-      fieldCounts.set(field, (fieldCounts.get(field) ?? 0) + 1);
-      if (!surfaceFields.has(field) && surfaceFields.size < 14) surfaceFields.set(field, surfaceFields.size);
-      const key = JSON.stringify(item.key);
-      if (!keyIndexes.has(key)) keyIndexes.set(key, keyIndexes.size);
-      const rowIndex = keyIndexes.get(key) ?? 0;
-      const bucket = Math.min(bucketCount - 1, Math.floor((rowIndex / Math.max(1, result.summary.matchedKeys + result.summary.mismatchedRows)) * bucketCount));
-      const values = surface.get(field) ?? Array.from({ length: bucketCount }, () => 0);
-      values[bucket] = (values[bucket] ?? 0) + 1;
-      surface.set(field, values);
-
-      const leftNumber = typeof item.leftValue === 'number' ? item.leftValue : Number.NaN;
-      const rightNumber = typeof item.rightValue === 'number' ? item.rightValue : Number.NaN;
-      const delta = Number.isFinite(leftNumber) && Number.isFinite(rightNumber)
-        ? Math.min(Math.abs(leftNumber - rightNumber), 1_000_000)
-        : 1;
-      // Keep the interactive point cloud bounded even for wide, high-volume comparisons.
-      if (index % Math.max(1, Math.ceil(result.mismatches.length / 1800)) === 0) {
-        scatterX.push(surfaceFields.get(field) ?? Math.min(surfaceFields.size, 13));
-        scatterY.push(rowIndex);
-        scatterZ.push(delta);
-        scatterText.push(`Key: ${escapeHtml(compactKey(key))}<br>Field: ${escapeHtml(field)}<br>A: ${escapeHtml(String(item.leftValue ?? '—'))}<br>B: ${escapeHtml(String(item.rightValue ?? '—'))}`);
-      }
-    });
-
-    const pareto = [...fieldCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 14);
-    const paretoTotal = [...fieldCounts.values()].reduce((sum, value) => sum + value, 0);
-    let cumulative = 0;
-    const cumulativePercent = pareto.map(([, count]) => {
-      cumulative += count;
-      return paretoTotal === 0 ? 0 : (cumulative / paretoTotal) * 100;
-    });
-    const surfaceLabels = [...surfaceFields.keys()];
-    const z = surfaceLabels.map((field) => surface.get(field) ?? Array.from({ length: bucketCount }, () => 0));
-    const segmentLabels = Array.from({ length: bucketCount }, (_, index) => `Segment ${index + 1}`);
-
-    return {
-      fieldCounts,
-      scatterX,
-      scatterY,
-      scatterZ,
-      scatterText,
-      surfaceLabels,
-      segmentLabels,
-      surfaceZ: z,
-      paretoLabels: pareto.map(([field]) => field),
-      paretoValues: pareto.map(([, count]) => count),
-      cumulativePercent,
-      sourceA: [result.missing.onlyOnLeft.length, result.duplicates.left.length],
-      sourceB: [result.missing.onlyOnRight.length, result.duplicates.right.length],
-      mismatchFields: fieldCounts.size,
-      totalMismatches: result.mismatches.length,
-    };
-  }, [result]);
-
   useEffect(() => {
-    const nodes = plotRefs.map((ref) => ref.current).filter((node): node is HTMLDivElement => Boolean(node));
     const plotly = window.Plotly;
-    const [scatterNode, surfaceNode, paretoNode, divergingNode] = nodes;
-    if (!plotlyReady || !plotly || !scatterNode || !surfaceNode || !paretoNode || !divergingNode) return;
-    const fontColor = getComputedStyle(document.documentElement).getPropertyValue('--foreground').trim()
-      ? getComputedStyle(document.querySelector('.theme-root') ?? document.documentElement).color
-      : '#64748b';
-    const gridColor = getComputedStyle(document.querySelector('.theme-root') ?? document.documentElement).getPropertyValue('--border').trim();
-    const commonLayout = {
-      autosize: true,
-      paper_bgcolor: 'rgba(0,0,0,0)',
-      plot_bgcolor: 'rgba(0,0,0,0)',
-      font: { family: 'Geist Variable, Inter, sans-serif', color: fontColor, size: 11 },
-      margin: { l: 48, r: 24, t: 24, b: 56 },
-      colorway: ['#6366f1', '#06b6d4', '#f59e0b', '#ec4899', '#10b981'],
-    };
-    const config = { responsive: true, displaylogo: false, displayModeBar: true, modeBarButtonsToRemove: ['lasso2d', 'select2d'] };
-    const plots = [
-      plotly.newPlot(scatterNode, [{
-        type: 'scatter3d', mode: 'markers', x: analysis.scatterX, y: analysis.scatterY, z: analysis.scatterZ,
-        text: analysis.scatterText, hovertemplate: '%{text}<extra></extra>',
-        marker: { size: 3.5, opacity: 0.82, color: analysis.scatterZ, colorscale: 'Viridis', showscale: true, colorbar: { title: 'Δ / type' } },
-      }], {
-        ...commonLayout, scene: {
-          xaxis: { title: 'Field index', gridcolor: gridColor }, yaxis: { title: 'Record index', gridcolor: gridColor },
-          zaxis: { title: 'Difference magnitude', gridcolor: gridColor }, camera: { eye: { x: 1.55, y: 1.55, z: 1.05 } },
-        },
-      }, config),
-      plotly.newPlot(surfaceNode, [{
-        type: 'surface', x: analysis.segmentLabels.map((_, index) => index + 1), y: analysis.surfaceLabels.map((_, index) => index + 1), z: analysis.surfaceZ,
-        colorscale: 'Portland', showscale: true, hovertemplate: 'Field index: %{y}<br>Segment: %{x}<br>Mismatch count: %{z}<extra></extra>',
-      }], {
-        ...commonLayout, margin: { l: 8, r: 8, t: 20, b: 8 },
-        scene: {
-          xaxis: { title: 'Record segments', tickmode: 'array', tickvals: analysis.segmentLabels.map((_, index) => index + 1), ticktext: analysis.segmentLabels, gridcolor: gridColor }, yaxis: { title: 'Fields', tickmode: 'array', tickvals: analysis.surfaceLabels.map((_, index) => index + 1), ticktext: analysis.surfaceLabels, gridcolor: gridColor },
-          zaxis: { title: 'Mismatch count', gridcolor: gridColor }, camera: { eye: { x: 1.55, y: 1.55, z: 1.05 } },
-        },
-      }, config),
-      plotly.newPlot(paretoNode, [
-        { type: 'bar', name: 'Mismatch count', x: analysis.paretoLabels, y: analysis.paretoValues, marker: { color: '#6366f1' }, hovertemplate: '%{x}<br>%{y} mismatches<extra></extra>' },
-        { type: 'scatter', name: 'Cumulative impact', x: analysis.paretoLabels, y: analysis.cumulativePercent, yaxis: 'y2', mode: 'lines+markers', line: { color: '#f59e0b', width: 3 }, hovertemplate: '%{x}<br>%{y:.1f}% cumulative<extra></extra>' },
-      ], {
-        ...commonLayout, barmode: 'group', margin: { l: 48, r: 52, t: 24, b: 100 },
-        xaxis: { tickangle: -28, automargin: true, gridcolor: gridColor },
-        yaxis: { title: 'Mismatches', rangemode: 'tozero', gridcolor: gridColor },
-        yaxis2: { title: 'Cumulative %', overlaying: 'y', side: 'right', range: [0, 105], ticksuffix: '%' },
-        legend: { orientation: 'h', y: 1.16 },
-      }, config),
-      plotly.newPlot(divergingNode, [
-        { type: 'bar', name: 'Source A', orientation: 'h', y: ['Missing records', 'Duplicate keys'], x: analysis.sourceA, marker: { color: '#06b6d4' }, hovertemplate: '%{y}<br>Source A: %{x}<extra></extra>' },
-        { type: 'bar', name: 'Source B', orientation: 'h', y: ['Missing records', 'Duplicate keys'], x: analysis.sourceB.map((value) => -value), marker: { color: '#f59e0b' }, hovertemplate: '%{y}<br>Source B: %{customdata}<extra></extra>', customdata: analysis.sourceB },
-      ], {
-        ...commonLayout, barmode: 'relative', margin: { l: 115, r: 24, t: 24, b: 48 },
-        xaxis: { title: 'A ← count → B', zeroline: true, zerolinewidth: 2, gridcolor: gridColor, tickformat: ',d' },
-        yaxis: { automargin: true },
-        legend: { orientation: 'h', y: 1.16 },
-      }, config),
-    ];
-    let active = true;
-    void Promise.all(plots).then(() => {
-      if (!active || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-      nodes.forEach((node, index) => {
-        const motion = animate(node, { opacity: [0.35, 1], y: [12, 0], duration: 720, delay: index * 90, ease: 'outExpo' });
-        void motion;
-      });
+    if (!plotlyReady || !plotly) return;
+    const targets = nodes.current.filter((node): node is HTMLDivElement => Boolean(node));
+    const theme = document.querySelector('.theme-root') ?? document.documentElement;
+    const color = getComputedStyle(theme).color || '#64748b';
+    const grid = getComputedStyle(theme).getPropertyValue('--border').trim() || 'rgba(148,163,184,.25)';
+    const common = { autosize: true, paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)', font: { family: 'Inter, sans-serif', color, size: 11 }, margin: { l: 48, r: 24, t: 24, b: 64 }, colorway: ['#6366f1', '#06b6d4', '#f59e0b', '#ec4899'] };
+    const config = { responsive: true, displaylogo: false, displayModeBar: true };
+    const tasks = analysis.charts.map((chart, index) => {
+      const target = targets[index];
+      if (!target || chart.data.length === 0) return Promise.resolve();
+      return plotly.newPlot(target, chart.data, { ...common, xaxis: { automargin: true, gridcolor: grid }, yaxis: { automargin: true, gridcolor: grid }, ...chart.layout }, config);
     });
-    const observer = new ResizeObserver(() => nodes.forEach((node) => plotly.Plots.resize(node)));
-    nodes.forEach((node) => observer.observe(node));
-    return () => {
-      active = false;
-      observer.disconnect();
-      nodes.forEach((node) => plotly.purge(node));
-    };
-  }, [analysis, plotRefs, plotlyReady]);
+    const observer = new ResizeObserver(() => targets.forEach((target) => plotly.Plots.resize(target)));
+    targets.forEach((target) => observer.observe(target));
+    return () => { observer.disconnect(); targets.forEach((target) => plotly.purge(target)); };
+  }, [analysis, plotlyReady]);
 
-  useEffect(() => {
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    const motion = animate('.analytics-report-header', { opacity: [0, 1], y: [14, 0], duration: 650, ease: 'outExpo' });
-    const cards = animate('.analytics-chart-card', { opacity: [0, 1], y: [20, 0], delay: stagger(85), duration: 700, ease: 'outExpo' });
-    return () => { motion.pause(); cards.pause(); };
-  }, [result]);
-
-  const plotlyAvailable = plotlyReady;
-  const noMismatchData = analysis.totalMismatches === 0;
+  const qualityTotal = result.missing.onlyOnLeft.length + result.missing.onlyOnRight.length
+    + result.duplicates.left.length + result.duplicates.right.length
+    + result.schema.onlyOnLeft.length + result.schema.onlyOnRight.length;
   return (
-    <section className="analytics-report" aria-label="Advanced data analytics report">
+    <section className="analytics-report" aria-label="Adaptive statistical analytics report">
       <div className="analytics-report-header">
         <div>
-          <div className="analytics-eyebrow"><Activity size={14} /> RECONCILIATION INTELLIGENCE</div>
-          <h2>Advanced analytics report</h2>
-          <p>Four complementary views built from the complete reconciliation result.</p>
+          <div className="analytics-eyebrow"><Activity size={14} /> ADAPTIVE STATISTICAL ANALYTICS</div>
+          <h2>Data intelligence report</h2>
+          <p>Methods are selected from the actual shape and quality of the comparison result.</p>
         </div>
-        <Badge variant="outline">LIVE RESULT · NO SYNTHETIC DATA</Badge>
+        <Badge variant="outline">OBSERVED DATA ONLY</Badge>
       </div>
       <div className="analytics-kpi-grid">
-        <Card className="analytics-kpi"><CardContent><span><ChartNoAxesCombined size={15} /> Value mismatches</span><strong>{number(analysis.totalMismatches)}</strong></CardContent></Card>
-        <Card className="analytics-kpi"><CardContent><span><Layers3 size={15} /> Affected fields</span><strong>{number(analysis.mismatchFields)}</strong></CardContent></Card>
-        <Card className="analytics-kpi"><CardContent><span><Boxes size={15} /> Missing records</span><strong>{number(result.missing.onlyOnLeft.length + result.missing.onlyOnRight.length)}</strong></CardContent></Card>
-        <Card className="analytics-kpi"><CardContent><span><BarChart3 size={15} /> Duplicate groups</span><strong>{number(result.duplicates.left.length + result.duplicates.right.length)}</strong></CardContent></Card>
+        <Card className="analytics-kpi"><CardContent><span><ChartNoAxesCombined size={15} /> Value mismatches</span><strong>{fmt(analysis.mismatchCount)}</strong></CardContent></Card>
+        <Card className="analytics-kpi"><CardContent><span><Layers3 size={15} /> Affected fields</span><strong>{fmt(analysis.fieldCount)}</strong></CardContent></Card>
+        <Card className="analytics-kpi"><CardContent><span><Boxes size={15} /> Structural issues</span><strong>{fmt(qualityTotal)}</strong></CardContent></Card>
+        <Card className="analytics-kpi"><CardContent><span><BarChart3 size={15} /> Numeric pairs / profile rows</span><strong>{fmt(analysis.numericCount)} / {fmt(analysis.profileCount)}</strong></CardContent></Card>
       </div>
-      {!plotlyAvailable && <div className="analytics-unavailable" role="status">Plotly.js CDN could not be loaded. Check your connection or CDN access and reload the report.</div>}
-      {noMismatchData && <div className="analytics-unavailable" role="status">No value mismatches were found. The mismatch-based 3D and Pareto views will remain empty; missing-record and duplicate counts are still shown in the KPIs.</div>}
+      {!plotlyReady && <div className="analytics-unavailable" role="status">Plotly.js could not be loaded. Check CDN access and reload the report.</div>}
       <div className="analytics-chart-grid">
-        <Card className="analytics-chart-card">
-          <CardHeader><div className="analytics-chart-title"><Badge>3D · 01</Badge><CardTitle>Mismatch topology</CardTitle></div><CardDescription>3D scatter · record index × field × numeric delta / mismatch marker</CardDescription></CardHeader>
-          <CardContent><div ref={scatterRef} className="analytics-plot" role="img" aria-label="Three-dimensional scatter plot of mismatch records and fields" /></CardContent>
-        </Card>
-        <Card className="analytics-chart-card">
-          <CardHeader><div className="analytics-chart-title"><Badge>3D · 02</Badge><CardTitle>Mismatch density surface</CardTitle></div><CardDescription>3D surface · mismatch counts across record segments and fields</CardDescription></CardHeader>
-          <CardContent><div ref={surfaceRef} className="analytics-plot" role="img" aria-label="Three-dimensional surface of mismatch density by field and record segment" /></CardContent>
-        </Card>
-        <Card className="analytics-chart-card">
-          <CardHeader><div className="analytics-chart-title"><Badge>2D · 03</Badge><CardTitle>Pareto impact analysis</CardTitle></div><CardDescription>Ranked mismatch fields with cumulative contribution</CardDescription></CardHeader>
-          <CardContent><div ref={paretoRef} className="analytics-plot analytics-plot-2d" role="img" aria-label="Pareto chart of mismatch fields and cumulative impact" /></CardContent>
-        </Card>
-        <Card className="analytics-chart-card">
-          <CardHeader><div className="analytics-chart-title"><Badge>2D · 04</Badge><CardTitle>Source imbalance</CardTitle></div><CardDescription>Diverging bars · records and duplicate groups by source</CardDescription></CardHeader>
-          <CardContent><div ref={divergingRef} className="analytics-plot analytics-plot-2d" role="img" aria-label="Diverging bar chart comparing missing records and duplicate groups across sources" /></CardContent>
-        </Card>
+        {analysis.charts.map((chart, index) => (
+          <Card className="analytics-chart-card" key={chart.title}>
+            <CardHeader>
+              <div className="analytics-chart-title"><Badge>{chart.method}</Badge><CardTitle>{chart.title}</CardTitle></div>
+              <CardDescription>{chart.description}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {chart.data.length > 0
+                ? <div ref={(node) => { nodes.current[index] = node; }} className={chart.method.includes('3D') || chart.method.includes('3d') ? 'analytics-plot analytics-plot-3d' : 'analytics-plot analytics-plot-2d'} role="img" aria-label={chart.title} />
+                : <div className="analytics-chart-empty">{chart.empty}</div>}
+            </CardContent>
+          </Card>
+        ))}
       </div>
-      <p className="analytics-footnote">3D scatter is capped at 1,800 plotted points for browser responsiveness. The density surface and Pareto totals are aggregated from all returned mismatch details. Numeric deltas are absolute; non-numeric mismatches use a neutral marker value of 1. Missing-record and duplicate counts are shown independently for A and B.</p>
+      <p className="analytics-footnote">3D is used only when at least five numeric mismatch pairs or three numeric record fields provide real dimensions. Otherwise the report falls back to 2D, categorical frequency, Pareto or structural quality analysis. No synthetic records or inferred time axis are created.</p>
     </section>
   );
 }
