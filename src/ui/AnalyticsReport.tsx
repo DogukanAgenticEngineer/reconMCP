@@ -101,7 +101,7 @@ function buildAnalytics(result: ReconciliationResult): { charts: ChartModel[]; m
     },
     {
       title: numericPairs.length >= 2 ? 'Source value relationship' : 'Mismatch composition',
-      method: numericPairs.length >= 5 && new Set(numericPairs.map((pair) => pair.delta)).size > 1 ? '3D scatter · A / B / absolute delta' : numericPairs.length >= 2 ? '2D scatter · A vs B' : 'Categorical frequency',
+      method: numericPairs.length >= 5 && new Set(numericPairs.map((pair) => pair.left)).size > 1 && new Set(numericPairs.map((pair) => pair.right)).size > 1 && new Set(numericPairs.map((pair) => pair.delta)).size > 1 ? '3D scatter · A / B / absolute delta' : numericPairs.length >= 2 ? '2D scatter · A vs B' : 'Categorical frequency',
       description: numericPairs.length >= 2 ? 'Each point is an actual numeric mismatch; the diagonal represents equality.' : 'Observed non-numeric value transitions, not generated sample data.',
       data: numericPairs.length >= 5 && new Set(numericPairs.map((pair) => pair.delta)).size > 1 ? [
         { type: 'scatter3d', mode: 'markers', x: numericPairs.map((pair) => pair.left), y: numericPairs.map((pair) => pair.right), z: numericPairs.map((pair) => pair.delta), text: numericPairs.map((pair) => pair.field), marker: { size: 4, opacity: 0.8, color: numericPairs.map((pair) => pair.delta), colorscale: 'Viridis' }, hovertemplate: 'A: %{x}<br>B: %{y}<br>|Δ|: %{z}<br>%{text}<extra></extra>' },
@@ -158,7 +158,7 @@ export function AnalyticsReport({ result }: AnalyticsReportProps): ReactElement 
   useEffect(() => {
     const plotly = window.Plotly;
     if (!plotlyReady || !plotly) return;
-    const targets = nodes.current.filter((node): node is HTMLDivElement => Boolean(node));
+    const targets = nodes.current;
     const theme = document.querySelector('.theme-root') ?? document.documentElement;
     const color = getComputedStyle(theme).color || '#64748b';
     const grid = getComputedStyle(theme).getPropertyValue('--border').trim() || 'rgba(148,163,184,.25)';
@@ -169,9 +169,10 @@ export function AnalyticsReport({ result }: AnalyticsReportProps): ReactElement 
       if (!target || chart.data.length === 0) return Promise.resolve();
       return plotly.newPlot(target, chart.data, { ...common, xaxis: { automargin: true, gridcolor: grid }, yaxis: { automargin: true, gridcolor: grid }, ...chart.layout }, config);
     });
-    const observer = new ResizeObserver(() => targets.forEach((target) => plotly.Plots.resize(target)));
-    targets.forEach((target) => observer.observe(target));
-    return () => { observer.disconnect(); targets.forEach((target) => plotly.purge(target)); };
+    const activeTargets = targets.filter((target): target is HTMLDivElement => Boolean(target));
+    const observer = new ResizeObserver(() => activeTargets.forEach((target) => plotly.Plots.resize(target)));
+    activeTargets.forEach((target) => observer.observe(target));
+    return () => { observer.disconnect(); activeTargets.forEach((target) => plotly.purge(target)); };
   }, [analysis, plotlyReady]);
 
   const qualityTotal = result.missing.onlyOnLeft.length + result.missing.onlyOnRight.length
