@@ -436,55 +436,89 @@
 }
 
 
-/* Connect MCP: animated spectral frame with strict monochrome hover inversion. */
-.connect-button {
+/* Magic UI Rainbow Button integration — tuned to Reconcile's neutral design system. */
+:root {
+  --color-1: hsl(0 92% 62%);
+  --color-2: hsl(275 88% 66%);
+  --color-3: hsl(218 92% 62%);
+  --color-4: hsl(184 86% 48%);
+  --color-5: hsl(48 96% 58%);
+}
+.dark {
+  --color-1: hsl(0 92% 68%);
+  --color-2: hsl(275 88% 72%);
+  --color-3: hsl(218 92% 70%);
+  --color-4: hsl(184 86% 56%);
+  --color-5: hsl(48 96% 66%);
+}
+@keyframes rainbow {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+@keyframes rainbow-glow {
+  0%, 100% { opacity: 0.34; filter: blur(9px) saturate(1); }
+  50% { opacity: 0.58; filter: blur(12px) saturate(1.18); }
+}
+.connect-mcp-button {
+  --connect-surface: #fff;
+  --connect-ink: #111318;
   position: relative;
   isolation: isolate;
-  min-height: 40px;
-  padding: 0 16px;
-  border: 1px solid transparent;
-  border-radius: 9px;
+  min-height: 38px;
+  padding-inline: 15px;
+  overflow: visible;
+  border: 1.5px solid transparent !important;
+  border-radius: 9px !important;
   background:
-    linear-gradient(#fff, #fff) padding-box,
-    conic-gradient(from var(--connect-angle, 0deg), #ff3b30, #ff9f0a, #ffe600, #34c759, #00c7be, #0a84ff, #5e5ce6, #bf5af2, #ff3b30) border-box;
-  color: #101010;
-  box-shadow: 0 0 0 1px rgb(255 255 255 / 45%), 0 0 13px rgb(94 92 230 / 24%), 0 0 27px rgb(0 199 190 / 15%);
-  font-size: 11px;
-  font-weight: 760;
+    linear-gradient(var(--connect-surface), var(--connect-surface)) padding-box,
+    linear-gradient(90deg, var(--color-1), var(--color-2), var(--color-3), var(--color-4), var(--color-5), var(--color-1)) border-box !important;
+  background-size: auto, 240% 100% !important;
+  background-position: 0 0, 0% 50% !important;
+  color: var(--connect-ink) !important;
+  font-size: 10px !important;
+  font-weight: 720 !important;
   letter-spacing: 0.075em;
-  transition: color 220ms ease, background-color 220ms ease, box-shadow 260ms ease, transform 220ms ease;
-  animation: connect-spectrum 8s linear infinite, connect-glow 3.2s ease-in-out infinite;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 5%);
+  animation: rainbow 5.5s linear infinite;
+  transition: color 220ms ease, background-color 220ms ease, box-shadow 240ms ease, transform 220ms ease !important;
 }
-.connect-button:hover {
-  border-color: transparent;
+.connect-mcp-button::after {
+  position: absolute;
+  z-index: -1;
+  inset: -2px;
+  border-radius: inherit;
+  background: linear-gradient(100deg, var(--color-1), var(--color-2), var(--color-3), var(--color-4), var(--color-5));
+  content: "";
+  opacity: 0.34;
+  filter: blur(9px);
+  animation: rainbow-glow 3.4s ease-in-out infinite;
+  pointer-events: none;
+}
+.connect-mcp-button:hover:not(:disabled) {
+  --connect-surface: #101114;
+  --connect-ink: #fff;
+  border-color: transparent !important;
   background:
-    linear-gradient(#080808, #080808) padding-box,
-    conic-gradient(from var(--connect-angle, 0deg), #ff3b30, #ff9f0a, #ffe600, #34c759, #00c7be, #0a84ff, #5e5ce6, #bf5af2, #ff3b30) border-box;
-  color: #fff;
-  box-shadow: 0 0 0 1px rgb(255 255 255 / 22%), 0 0 18px rgb(255 255 255 / 22%), 0 0 34px rgb(94 92 230 / 25%);
+    linear-gradient(var(--connect-surface), var(--connect-surface)) padding-box,
+    linear-gradient(90deg, var(--color-1), var(--color-2), var(--color-3), var(--color-4), var(--color-5), var(--color-1)) border-box !important;
+  background-size: auto, 240% 100% !important;
+  background-position: 0 0, 100% 50% !important;
+  color: var(--connect-ink) !important;
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 8%), 0 0 18px rgb(94 92 230 / 16%);
   transform: translateY(-1px);
 }
-.connect-button:active { transform: translateY(0) scale(0.98); }
-.connect-button:focus-visible { outline: 3px solid hsl(var(--ring) / 48%); outline-offset: 4px; }
-.dark .connect-button {
-  background:
-    linear-gradient(#080808, #080808) padding-box,
-    conic-gradient(from var(--connect-angle, 0deg), #ff3b30, #ff9f0a, #ffe600, #34c759, #00c7be, #0a84ff, #5e5ce6, #bf5af2, #ff3b30) border-box;
-  color: #fff;
+.dark .connect-mcp-button {
+  --connect-surface: #101114;
+  --connect-ink: #f8fafc;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 20%);
 }
-.dark .connect-button:hover {
-  background:
-    linear-gradient(#fff, #fff) padding-box,
-    conic-gradient(from var(--connect-angle, 0deg), #ff3b30, #ff9f0a, #ffe600, #34c759, #00c7be, #0a84ff, #5e5ce6, #bf5af2, #ff3b30) border-box;
-  color: #080808;
-  box-shadow: 0 0 18px rgb(255 255 255 / 28%), 0 0 34px rgb(255 255 255 / 18%);
+.dark .connect-mcp-button:hover:not(:disabled) {
+  --connect-surface: #fff;
+  --connect-ink: #101114;
+  box-shadow: 0 0 18px rgb(255 255 255 / 15%);
 }
-@property --connect-angle { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
-@keyframes connect-spectrum { to { --connect-angle: 360deg; } }
-@keyframes connect-glow {
-  0%, 100% { filter: saturate(1); }
-  50% { filter: saturate(1.35); }
-}
+.connect-mcp-button:active:not(:disabled) { transform: translateY(0) scale(0.985); }
+.connect-mcp-button:focus-visible { outline: 3px solid hsl(var(--ring) / 35%) !important; outline-offset: 4px; }
 @media (prefers-reduced-motion: reduce) {
-  .connect-button { animation: none; }
+  .connect-mcp-button, .connect-mcp-button::after { animation: none; }
 }
