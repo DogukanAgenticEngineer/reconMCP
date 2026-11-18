@@ -53,7 +53,7 @@ export function readMultipartBody(req: IncomingMessage): Promise<MultipartBody> 
     try {
       parser = Busboy({
         headers: req.headers,
-        limits: { files: 2, fields: 20, parts: 22, fieldSize: 65_536, fileSize: MAX_FILE_BYTES },
+        limits: { files: 10, fields: 20, parts: 30, fieldSize: 65_536, fileSize: MAX_FILE_BYTES },
       });
     } catch {
       fail('Multipart içerik biçimi geçersiz.');
@@ -64,14 +64,14 @@ export function readMultipartBody(req: IncomingMessage): Promise<MultipartBody> 
         fail('Multipart alanı geçersiz veya sınırı aşıyor.');
         return;
       }
-      if (!['mode', 'source', 'left', 'right', 'keyPairs', 'fieldPairs', 'tolerance', 'trimWhitespace', 'caseSensitiveKeys', 'caseSensitiveValues'].includes(name)) {
+      if (!['mode', 'source', 'sources', 'left', 'right', 'keyPairs', 'fieldPairs', 'tolerance', 'trimWhitespace', 'caseSensitiveKeys', 'caseSensitiveValues'].includes(name)) {
         fail('Multipart alan adı desteklenmiyor.');
         return;
       }
       fields[name] = value;
     });
     parser.on('file', (name, stream) => {
-      if (!['file', 'fileLeft', 'fileRight'].includes(name) || chunksByFile.has(name)) {
+      if (!(['file', 'fileLeft', 'fileRight'].includes(name) || /^fileSource_[0-9]$/.test(name)) || chunksByFile.has(name)) {
         stream.resume();
         fail('Dosya alanı geçersiz.');
         return;
@@ -93,7 +93,7 @@ export function readMultipartBody(req: IncomingMessage): Promise<MultipartBody> 
         if (!settled) files.set(name, Buffer.concat(chunksByFile.get(name) ?? []));
       });
     });
-    parser.on('filesLimit', () => fail('İstek en fazla iki dosya içerebilir.'));
+    parser.on('filesLimit', () => fail('İstek en fazla on dosya içerebilir.'));
     parser.on('fieldsLimit', () => fail('Multipart alan sayısı sınırı aşıyor.'));
     parser.on('partsLimit', () => fail('Multipart parça sayısı sınırı aşıyor.'));
     parser.on('error', () => fail('Multipart içerik ayrıştırılamadı.'));

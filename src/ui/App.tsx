@@ -13,7 +13,7 @@ import { Spinner } from '@/components/ui/spinner.js';
 import { Switch } from '@/components/ui/switch.js';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table.js';
 import { AnimatedThemeToggler } from '@/components/ui/animated-theme-toggler.js';
-import { DitherField } from '@/components/ui/dither-field.js';
+import { NoiseTexture } from '@/components/ui/noise-texture.js';
 import { Pointer } from '@/components/ui/pointer.js';
 import { TypingAnimation } from '@/components/ui/typing-animation.js';
 import { Highlighter } from '@/components/ui/highlighter.js';
@@ -366,14 +366,7 @@ function App(): ReactElement {
 
   return (
     <div className={`theme-root ${appearance === 'dark' ? 'dark' : ''}`}>
-      <DitherField
-        pattern="horizon"
-        color={appearance === 'dark'
-          ? ['#172554', '#38bdf8', '#e0f2fe']
-          : ['#dbeafe', '#60a5fa', '#eff6ff']}
-        isDark={appearance === 'dark'}
-        className="dither-bg"
-      />
+      <NoiseTexture className="noise-texture-bg" frequency={0.55} octaves={5} slope={0.2} noiseOpacity={0.7} />
       <Pointer />
       <OnboardingDialog />
       <div className="app-shell dashboard-page" id="app-top">
