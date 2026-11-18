@@ -175,17 +175,6 @@ function ensureColumns(dataset: Dataset, pairs: FieldPair[], side: 'left' | 'rig
   if (missing.length > 0) throw new Error(`${label} kaynağında eşlenen alan bulunamadı.`);
 }
 
-function addPreview(
-  rows: ComparisonPreviewRow[],
-  key: string,
-  status: ComparisonPreviewRow['status'],
-  leftRows: number,
-  rightRows: number,
-  mismatchFields = 0,
-): void {
-  rows.push({ key, status, leftRows, rightRows, mismatchFields });
-}
-
 export function compareDatasets(left: Dataset, right: Dataset, input: CompareOptions): ReconciliationResult {
   if (left.rows.length > 10_000 || right.rows.length > 10_000 || left.columns.length > 100 || right.columns.length > 100) {
     throw new Error('Kaynak, izin verilen satır veya sütun sınırını aşıyor.');
