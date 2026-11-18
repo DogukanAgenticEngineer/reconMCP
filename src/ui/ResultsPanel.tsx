@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactElement } from 'react';
 import { Search } from 'lucide-react';
+import { AnalyticsReport } from './AnalyticsReport.js';
 import { animate, stagger } from 'animejs';
 import type { ColumnDef } from '@tanstack/react-table';
 import { Badge } from '@/components/ui/badge.js';
@@ -307,6 +308,7 @@ export function ResultsPanel({ result, tab, onTabChange, onlyDifferences }: Resu
             <TabsTrigger value="comparison">Comparison</TabsTrigger>
             <TabsTrigger value="differences">Differences</TabsTrigger>
             <TabsTrigger value="summary">Summary</TabsTrigger>
+            <TabsTrigger value="analytics">Analytics report</TabsTrigger>
           </TabsList>
           <TabsContent value="comparison" className="tab-content">
             {!result ? <EmptyState>Choose both source files, then run reconciliation.</EmptyState> : <>
@@ -322,6 +324,9 @@ export function ResultsPanel({ result, tab, onTabChange, onlyDifferences }: Resu
           </TabsContent>
           <TabsContent value="summary" className="tab-content">
             {!result ? <EmptyState>No result yet.</EmptyState> : <Summary result={result} />}
+          </TabsContent>
+          <TabsContent value="analytics" className="tab-content analytics-tab-content">
+            {!result ? <EmptyState>Run a comparison to generate the advanced analytics report.</EmptyState> : <AnalyticsReport result={result} />}
           </TabsContent>
         </Tabs>
       </CardContent>
