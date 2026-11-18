@@ -164,10 +164,10 @@ export function AnalyticsReport({ result }: AnalyticsReportProps): ReactElement 
     const grid = getComputedStyle(theme).getPropertyValue('--border').trim() || 'rgba(148,163,184,.25)';
     const common = { autosize: true, paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)', font: { family: 'Inter, sans-serif', color, size: 11 }, margin: { l: 48, r: 24, t: 24, b: 64 }, colorway: ['#6366f1', '#06b6d4', '#f59e0b', '#ec4899'] };
     const config = { responsive: true, displaylogo: false, displayModeBar: true };
-    const tasks = analysis.charts.map((chart, index) => {
+    analysis.charts.forEach((chart, index) => {
       const target = targets[index];
-      if (!target || chart.data.length === 0) return Promise.resolve();
-      return plotly.newPlot(target, chart.data, { ...common, xaxis: { automargin: true, gridcolor: grid }, yaxis: { automargin: true, gridcolor: grid }, ...chart.layout }, config);
+      if (!target || chart.data.length === 0) return;
+      void plotly.newPlot(target, chart.data, { ...common, xaxis: { automargin: true, gridcolor: grid }, yaxis: { automargin: true, gridcolor: grid }, ...chart.layout }, config);
     });
     const activeTargets = targets.filter((target): target is HTMLDivElement => Boolean(target));
     const observer = new ResizeObserver(() => activeTargets.forEach((target) => plotly.Plots.resize(target)));
