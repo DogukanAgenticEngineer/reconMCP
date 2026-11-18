@@ -590,8 +590,8 @@
 
 /* First-visit onboarding — composed from the existing shadcn/ui primitives. */
 [data-slot="dialog-content"].onboarding-dialog {
-  width: min(680px, calc(100vw - 28px));
-  max-width: 680px;
+  width: min(760px, calc(100vw - 28px));
+  max-width: 760px;
   max-height: min(820px, calc(100dvh - 28px));
   gap: 0;
   padding: 26px;
@@ -613,6 +613,19 @@
 .onboarding-heading { align-items: center; gap: 12px; padding: 27px 12px 20px; text-align: center; }
 .onboarding-step-meta { width: 100%; justify-content: space-between; gap: 10px; color: hsl(var(--muted-foreground)); font-size: 10px; font-variant-numeric: tabular-nums; }
 .onboarding-step-meta [data-slot="badge"] { font-size: 9px; }
+.onboarding-heading-welcome { align-items: stretch; gap: 16px; padding: 20px 2px 18px; text-align: left; }
+.onboarding-welcome-layout { display: grid; width: 100%; grid-template-columns: minmax(0, .86fr) minmax(0, 1.14fr); align-items: center; gap: 22px; }
+.onboarding-welcome-copy { display: flex; min-width: 0; flex-direction: column; align-items: flex-start; gap: 11px; text-align: left; }
+.onboarding-welcome-copy [data-slot="dialog-title"] { max-width: 360px; font-size: clamp(24px, 3.5vw, 31px); }
+.onboarding-welcome-copy [data-slot="dialog-description"] { max-width: 350px; font-size: 11px; }
+.onboarding-file-types { display: flex; flex-wrap: wrap; gap: 7px; padding-top: 2px; }
+.onboarding-file-types span { display: inline-flex; align-items: center; gap: 6px; padding: 6px 9px; border: 1px solid hsl(var(--border)); border-radius: 999px; background: hsl(var(--card)); color: hsl(var(--muted-foreground)); font-size: 10px; font-weight: 650; }
+.onboarding-file-types svg { width: 13px; height: 13px; color: hsl(var(--primary)); }
+.onboarding-video-panel { min-width: 0; padding: 10px; border: 1px solid hsl(var(--border)); border-radius: 15px; background: linear-gradient(145deg, hsl(var(--muted) / 70%), hsl(var(--card))); box-shadow: 0 12px 32px rgb(15 23 42 / 7%); }
+.onboarding-video-heading { display: flex; align-items: center; gap: 7px; margin: 1px 0 9px 2px; color: hsl(var(--muted-foreground)); font-size: 9px; font-weight: 750; letter-spacing: .1em; }
+.onboarding-live-dot { width: 7px; height: 7px; flex: 0 0 auto; border-radius: 50%; background: hsl(var(--primary)); box-shadow: 0 0 0 3px hsl(var(--primary) / 12%); }
+.onboarding-video { display: block; width: 100%; aspect-ratio: 16 / 9; border-radius: 9px; background: #101827; object-fit: cover; }
+.onboarding-video-caption { margin: 8px 2px 1px; color: hsl(var(--muted-foreground)); font-size: 10px; line-height: 1.5; }
 .onboarding-hero-icon { display: grid; width: 54px; height: 54px; place-items: center; border: 1px solid hsl(var(--primary) / 18%); border-radius: 17px; background: linear-gradient(145deg, hsl(var(--primary) / 12%), hsl(var(--primary) / 4%)); color: hsl(var(--primary)); }
 .onboarding-hero-icon svg { width: 25px; height: 25px; stroke-width: 1.7; }
 .onboarding-heading [data-slot="dialog-title"] { max-width: 560px; font-size: clamp(23px, 4vw, 32px); font-weight: 760; line-height: 1.1; letter-spacing: -.045em; }
@@ -634,6 +647,12 @@
 @media (max-width: 620px) {
   [data-slot="dialog-content"].onboarding-dialog { padding: 19px; border-radius: 16px; }
   .onboarding-heading { padding: 23px 2px 17px; }
+  .onboarding-heading-welcome { gap: 15px; padding: 18px 2px 15px; }
+  .onboarding-welcome-layout { grid-template-columns: minmax(0, 1fr); gap: 15px; }
+  .onboarding-welcome-copy { gap: 9px; }
+  .onboarding-welcome-copy [data-slot="dialog-title"] { max-width: 500px; font-size: clamp(24px, 7vw, 30px); }
+  .onboarding-welcome-copy [data-slot="dialog-description"] { max-width: 520px; }
+  .onboarding-video-panel { padding: 8px; }
   .onboarding-feature-grid { grid-template-columns: 1fr; gap: 8px; padding: 14px 0 18px; }
   .onboarding-feature [data-slot="card-content"] { flex-direction: row; align-items: flex-start; gap: 11px; padding: 12px; }
   .onboarding-feature-icon { flex: 0 0 auto; }
@@ -642,5 +661,6 @@
   .onboarding-footer { margin: 0 -19px -19px; padding: 12px 19px; }
 }
 @media (prefers-reduced-motion: reduce) {
+  .onboarding-live-dot { animation: none; }
   .onboarding-progress [data-slot="progress-indicator"] { transition: none; }
 }
