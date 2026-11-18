@@ -16,6 +16,7 @@ import { ReconciliationSettings } from './ReconciliationSettings.js';
 import { chooseKeyPair, commonFieldPairs, emptyUpload, estimateMultipartRequestBytes, fileFormat, formatBytes, isValidPairSelection, isValidTolerance, MAX_COMBINED_BYTES, MAX_FIELD_PAIRS, MAX_FILE_BYTES, MAX_KEY_PAIRS, type Pair, type ResultResponse, type Side, type SourceUpload } from './dashboard-logic.js';
 import { ResultsPanel } from './ResultsPanel.js';
 import { SourceCard } from './SourceCard.js';
+import { OnboardingDialog } from './OnboardingDialog.js';
 
  type Preview = { columns: string[]; rowCount: number };
 type ApiError = { error?: string };
@@ -242,6 +243,7 @@ function App(): ReactElement {
 
   return (
     <div className={`theme-root ${appearance === 'dark' ? 'dark' : ''}`}>
+      <OnboardingDialog />
       <div className="app-shell dashboard-page" id="app-top">
         <div className="dashboard-container">
           <header className="topbar">
