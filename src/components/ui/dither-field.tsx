@@ -72,7 +72,10 @@ export function DitherField({
               + Math.sin((nx + ny) * 4.1 + t * 1.3) * 0.25
               + Math.sin((nx - ny) * 3.9 - t * 0.5) * 0.25;
 
-          const value = Math.min(0.999, Math.max(0, (noise + 1) / 2));
+          // Keep the upper half clean and let the ordered-dither glow rise
+          // from the bottom, matching the reference hero treatment.
+          const horizon = Math.max(0, Math.min(1, (ny - 0.28) / 0.72));
+          const value = Math.min(0.999, Math.max(0, horizon + noise * 0.28));
           const bx = x % 4;
           const by = y % 4;
           const threshold = (BAYER4[by * 4 + bx]! + 0.5) / 16;
@@ -88,7 +91,7 @@ export function DitherField({
           data[idx] = shade[0];
           data[idx + 1] = shade[1];
           data[idx + 2] = shade[2];
-          data[idx + 3] = isDark ? 210 : 190;
+          data[idx + 3] = Math.round((isDark ? 190 : 150) * (0.45 + horizon * 0.55));
         }
       }
 

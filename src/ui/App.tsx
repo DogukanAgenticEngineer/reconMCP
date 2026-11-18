@@ -369,8 +369,8 @@ function App(): ReactElement {
       <DitherField
         pattern="horizon"
         color={appearance === 'dark'
-          ? ['#082f49', '#38bdf8', '#dff6ff']
-          : ['#e0f7ff', '#7dd3fc', '#0e7490']}
+          ? ['#172554', '#38bdf8', '#e0f2fe']
+          : ['#dbeafe', '#60a5fa', '#eff6ff']}
         isDark={appearance === 'dark'}
         className="dither-bg"
       />
