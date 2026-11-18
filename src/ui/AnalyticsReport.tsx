@@ -59,7 +59,7 @@ export function AnalyticsReport({ result }: AnalyticsReportProps): ReactElement 
       const rowIndex = keyIndexes.get(key) ?? 0;
       const bucket = Math.min(bucketCount - 1, Math.floor((rowIndex / Math.max(1, result.summary.matchedKeys + result.summary.mismatchedRows)) * bucketCount));
       const values = surface.get(field) ?? Array.from({ length: bucketCount }, () => 0);
-      values[bucket] += 1;
+      values[bucket] = (values[bucket] ?? 0) + 1;
       surface.set(field, values);
 
       const leftNumber = typeof item.leftValue === 'number' ? item.leftValue : Number.NaN;
@@ -109,7 +109,8 @@ export function AnalyticsReport({ result }: AnalyticsReportProps): ReactElement 
   useEffect(() => {
     const nodes = plotRefs.map((ref) => ref.current).filter((node): node is HTMLDivElement => Boolean(node));
     const plotly = window.Plotly;
-    if (!plotlyReady || !plotly || nodes.length !== 4) return;
+    const [scatterNode, surfaceNode, paretoNode, divergingNode] = nodes;
+    if (!plotlyReady || !plotly || !scatterNode || !surfaceNode || !paretoNode || !divergingNode) return;
     const fontColor = getComputedStyle(document.documentElement).getPropertyValue('--foreground').trim()
       ? getComputedStyle(document.querySelector('.theme-root') ?? document.documentElement).color
       : '#64748b';
@@ -124,7 +125,7 @@ export function AnalyticsReport({ result }: AnalyticsReportProps): ReactElement 
     };
     const config = { responsive: true, displaylogo: false, displayModeBar: true, modeBarButtonsToRemove: ['lasso2d', 'select2d'] };
     const plots = [
-      plotly.newPlot(nodes[0], [{
+      plotly.newPlot(scatterNode, [{
         type: 'scatter3d', mode: 'markers', x: analysis.scatterX, y: analysis.scatterY, z: analysis.scatterZ,
         text: analysis.scatterText, hovertemplate: '%{text}<extra></extra>',
         marker: { size: 3.5, opacity: 0.82, color: analysis.scatterZ, colorscale: 'Viridis', showscale: true, colorbar: { title: 'Δ / type' } },
@@ -134,7 +135,7 @@ export function AnalyticsReport({ result }: AnalyticsReportProps): ReactElement 
           zaxis: { title: 'Difference magnitude', gridcolor: gridColor }, camera: { eye: { x: 1.55, y: 1.55, z: 1.05 } },
         },
       }, config),
-      plotly.newPlot(nodes[1], [{
+      plotly.newPlot(surfaceNode, [{
         type: 'surface', x: analysis.segmentLabels.map((_, index) => index + 1), y: analysis.surfaceLabels.map((_, index) => index + 1), z: analysis.surfaceZ,
         colorscale: 'Portland', showscale: true, hovertemplate: 'Field index: %{y}<br>Segment: %{x}<br>Mismatch count: %{z}<extra></extra>',
       }], {
@@ -144,7 +145,7 @@ export function AnalyticsReport({ result }: AnalyticsReportProps): ReactElement 
           zaxis: { title: 'Mismatch count', gridcolor: gridColor }, camera: { eye: { x: 1.55, y: 1.55, z: 1.05 } },
         },
       }, config),
-      plotly.newPlot(nodes[2], [
+      plotly.newPlot(paretoNode, [
         { type: 'bar', name: 'Mismatch count', x: analysis.paretoLabels, y: analysis.paretoValues, marker: { color: '#6366f1' }, hovertemplate: '%{x}<br>%{y} mismatches<extra></extra>' },
         { type: 'scatter', name: 'Cumulative impact', x: analysis.paretoLabels, y: analysis.cumulativePercent, yaxis: 'y2', mode: 'lines+markers', line: { color: '#f59e0b', width: 3 }, hovertemplate: '%{x}<br>%{y:.1f}% cumulative<extra></extra>' },
       ], {
@@ -154,7 +155,7 @@ export function AnalyticsReport({ result }: AnalyticsReportProps): ReactElement 
         yaxis2: { title: 'Cumulative %', overlaying: 'y', side: 'right', range: [0, 105], ticksuffix: '%' },
         legend: { orientation: 'h', y: 1.16 },
       }, config),
-      plotly.newPlot(nodes[3], [
+      plotly.newPlot(divergingNode, [
         { type: 'bar', name: 'Source A', orientation: 'h', y: ['Missing records', 'Duplicate keys'], x: analysis.sourceA, marker: { color: '#06b6d4' }, hovertemplate: '%{y}<br>Source A: %{x}<extra></extra>' },
         { type: 'bar', name: 'Source B', orientation: 'h', y: ['Missing records', 'Duplicate keys'], x: analysis.sourceB.map((value) => -value), marker: { color: '#f59e0b' }, hovertemplate: '%{y}<br>Source B: %{customdata}<extra></extra>', customdata: analysis.sourceB },
       ], {
