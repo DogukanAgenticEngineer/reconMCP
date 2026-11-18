@@ -75,6 +75,12 @@ describe('source security boundaries', () => {
     expect(read('app.config.ts')).toContain('.png');
     expect(read('src/ui/ResultsPanel.tsx')).toContain('<Tabs');
     expect(read('src/ui/ResultsPanel.tsx')).toContain('AnalyticsReport');
+    const onboarding = read('src/ui/OnboardingDialog.tsx');
+    expect(onboarding).toContain("from '@/components/ui/dialog.js'");
+    expect(onboarding).toContain("from '@/components/ui/progress.js'");
+    expect(onboarding).toContain('reconcile-mcp:onboarding:v1:completed');
+    expect(onboarding).toContain('Start reconciling');
+    expect(read('src/ui/App.tsx')).toContain('<OnboardingDialog />');
     expect(read('src/ui/AnalyticsReport.tsx')).toContain('function buildAnalytics');
     expect(read('src/ui/AnalyticsReport.tsx')).toContain('Adaptive statistical analytics');
     expect(read('src/ui/AnalyticsReport.tsx')).toContain("axis: 'x'");
