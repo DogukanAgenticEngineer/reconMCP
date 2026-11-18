@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { assertResponseSize, compareDatasets, COMPARISON_PREVIEW_LIMIT } from '../core/compare.js';
 import { resultToCsv } from '../core/report.js';
 import type { CompareOptions, ReconciliationResult } from '../core/types.js';
+import { inferFieldPairs, inferKeyPairs } from '../core/matching.js';
 import { carbonMarkdown, estimateCarbon, type CarbonEstimate } from './carbon.js';
 import { loadMcpSource } from '../sources/load-mcp.js';
 import { mcpCompareInputSchema, mcpSourceSchema, type McpCompareInput } from '../sources/mcp-schemas.js';
@@ -37,7 +38,7 @@ External connections are subject to deployment network policy. Do not place cred
 
 ## Matching
 
-Provide one or more \`keyPairs\` mapping a field in A to a field in B. Optionally supply \`fieldPairs\`, a non-negative base-10 \`tolerance\`, \`trimWhitespace\`, and \`caseSensitiveValues\`. Key matching remains case-sensitive unless explicitly configured otherwise.
+If \`keyPairs\` are omitted, conservative semantic aliases (such as customer_id/client_id or invoice_no/invoice_id) infer a likely key and recognized field mappings. If no likely key exists, provide explicit \`keyPairs\`. Optionally supply \`fieldPairs\`, a non-negative base-10 \`tolerance\`, \`trimWhitespace\`, and \`caseSensitiveValues\`. Key matching remains case-sensitive unless explicitly configured otherwise.
 
 ## Output shape
 
@@ -74,12 +75,19 @@ function publicError(error: unknown): string {
   return safePrefixes.some((prefix) => message.startsWith(prefix)) ? message : 'İstek doğrulanamadı veya güvenli biçimde işlenemedi.';
 }
 
-async function run(input: McpCompareInput): Promise<ReconciliationResult> {
+type IntelligentResult = ReconciliationResult & { matching: { mode: 'automatic' | 'explicit'; keyPairs: Array<{ left: string; right: string }>; fieldPairs: Array<{ left: string; right: string }> } };
+
+async function run(input: McpCompareInput): Promise<IntelligentResult> {
   const [left, right] = await Promise.all([loadMcpSource(input.left), loadMcpSource(input.right)]);
-  return compareDatasets(left, right, input as CompareOptions);
+  const inferred = inferFieldPairs(left.columns, right.columns);
+  const keyPairs = input.keyPairs?.length ? input.keyPairs : inferKeyPairs(inferred);
+  if (!keyPairs.length) throw new Error('Otomatik anahtar alanı belirlenemedi. Lütfen keyPairs alanını açıkça belirtin.');
+  const fieldPairs = input.fieldPairs ?? inferred.filter((pair) => !keyPairs.some((key) => key.left === pair.left || key.right === pair.right));
+  const result = compareDatasets(left, right, { ...input, keyPairs, fieldPairs } as CompareOptions);
+  return { ...result, matching: { mode: input.keyPairs?.length ? 'explicit' : 'automatic', keyPairs, fieldPairs } };
 }
 
-function resultPresentation(result: ReconciliationResult): Record<string, unknown> {
+function resultPresentation(result: IntelligentResult): Record<string, unknown> {
   const { summary } = result;
   const issueCount = summary.valueMismatches + summary.missingOnLeft + summary.missingOnRight
     + summary.duplicateKeysOnLeft + summary.duplicateKeysOnRight + summary.schemaIssues;
@@ -95,6 +103,7 @@ function resultPresentation(result: ReconciliationResult): Record<string, unknow
       { label: 'Duplicate keys', value: summary.duplicateKeysOnLeft + summary.duplicateKeysOnRight, tone: summary.duplicateKeysOnLeft + summary.duplicateKeysOnRight ? 'negative' : 'positive' },
       { label: 'Schema differences', value: summary.schemaIssues, tone: summary.schemaIssues ? 'warning' : 'positive' },
     ],
+    matching: result.matching,
     statusCounts: {
       match: summary.matchedRows,
       mismatch: summary.mismatchedRows,
@@ -176,8 +185,10 @@ function failed(error: unknown, carbonEstimate: CarbonEstimate): {
   };
 }
 
-function toolMarkdown(result: ReconciliationResult, focus: string, carbonEstimate: CarbonEstimate): string {
-  return `${result.markdown}\n\n---\n\n## Requested view\n\n${focus}\n\n---\n\n${carbonMarkdown(carbonEstimate)}`;
+function toolMarkdown(result: IntelligentResult, focus: string, carbonEstimate: CarbonEstimate): string {
+  const rows = result.matching.keyPairs.map((p) => `| ${p.left} | ${p.right} | Record key |`).concat(result.matching.fieldPairs.map((p) => `| ${p.left} | ${p.right} | Compared value |`));
+  const mapping = `## Intelligent column mapping\n\nMode: **${result.matching.mode}**\n\n| Source A | Source B | Role |\n|:--|:--|:--|\n${rows.join('\n')}`;
+  return `${result.markdown}\n\n${mapping}\n\n---\n\n## Requested view\n\n${focus}\n\n---\n\n${carbonMarkdown(carbonEstimate)}`;
 }
 
 export function createMcpServer(): McpServer {
@@ -199,7 +210,7 @@ export function createMcpServer(): McpServer {
       role: 'user',
       content: {
         type: 'text',
-        text: 'Help me reconcile two data sources I am authorized to use. First identify candidate key fields and ask me to confirm ambiguous mappings. Use the supplied tool arguments to map one or more keyPairs and the value fieldPairs to compare. Apply decimal tolerance only when I specify it; keep key matching and value case-sensitivity explicit. If the user asks about a planned call carbon footprint, ask for or state a conservative expected server duration and call estimate_operation_carbon before running it. Run the deterministic comparison, then show the returned carbonEstimate and explain that it is modeled, not metered. Explain totals and findings from the returned data, and provide the generated CSV report when requested. Never infer findings that are not in the result, never expose credentials, and do not claim that an external MCP client or provider stores no data.',
+        text: 'Help me reconcile two data sources I am authorized to use. Inspect column names and use automatic semantic mapping when a likely key can be inferred. If the key is ambiguous, ask me to confirm it; otherwise provide explicit keyPairs and fieldPairs. Apply decimal tolerance only when I specify it; keep key matching and value case-sensitivity explicit. If the user asks about a planned call carbon footprint, ask for or state a conservative expected server duration and call estimate_operation_carbon before running it. Run the deterministic comparison, then show the returned carbonEstimate and explain that it is modeled, not metered. Explain totals and findings from the returned data, and provide the generated CSV report when requested. Never infer findings that are not in the result, never expose credentials, and do not claim that an external MCP client or provider stores no data.',
       },
     }],
   }));

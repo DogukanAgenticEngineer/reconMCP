@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import type { ReactElement } from 'react';
 import { Moon, Sun } from 'lucide-react';
+import { animate, stagger } from 'animejs';
 import { Alert, AlertDescription } from '@/components/ui/alert.js';
 import { Badge } from '@/components/ui/badge.js';
 import { Button } from '@/components/ui/button.js';
@@ -71,6 +72,23 @@ function App(): ReactElement {
   const bothInspected = Boolean(left.file && right.file && left.columns.length > 0 && right.columns.length > 0 && !left.busy && !right.busy);
   const ready = Boolean(bothInspected && keyPairsValid && fieldPairsValid && !toleranceInvalid && !working && !overBudget);
   const endpoint = `${window.location.origin}/api/mcp`;
+
+  // Motion 1–2: workspace entrance and staggered source-card reveal.
+  useEffect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const headerMotion = animate('.topbar', { opacity: [0, 1], y: [-12, 0], duration: 620, ease: 'outExpo' });
+    const sourceMotion = animate('.source-card', { opacity: [0, 1], y: [18, 0], delay: stagger(95), duration: 680, ease: 'outExpo' });
+    return () => { headerMotion.pause(); sourceMotion.pause(); };
+  }, []);
+
+  // Motion 3: restrained processing pulse while reconciliation runs.
+  useEffect(() => {
+    if (!working || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const button = document.querySelector('.run-button');
+    if (!button) return;
+    const pulse = animate(button, { scale: [1, 1.025, 1], duration: 920, ease: 'inOutSine', loop: true });
+    return () => { pulse.pause(); };
+  }, [working]);
 
   useEffect(() => {
     const automaticKey = chooseKeyPair(commonPairs);
