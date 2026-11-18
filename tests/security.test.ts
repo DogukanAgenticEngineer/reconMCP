@@ -77,6 +77,8 @@ describe('source security boundaries', () => {
     expect(read('src/ui/ResultsPanel.tsx')).toContain('AnalyticsReport');
     expect(read('src/ui/AnalyticsReport.tsx')).toContain('function buildAnalytics');
     expect(read('src/ui/AnalyticsReport.tsx')).toContain('Adaptive statistical analytics');
+    expect(read('src/ui/AnalyticsReport.tsx')).toContain("axis: 'x'");
+    expect(read('src/ui/AnalyticsReport.tsx')).toContain('grid: [columns, rows]');
     expect(read('src/ui/AnalyticsReport.tsx')).not.toContain("type: 'surface'");
     expect(read('vercel.json')).toContain("script-src 'self' https://cdn.plot.ly");
     expect(read('index.html')).toContain('cdn.plot.ly/plotly-');
