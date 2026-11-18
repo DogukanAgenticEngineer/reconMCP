@@ -45,7 +45,7 @@ describe('source security boundaries', () => {
       'api/mcp.ts', 'api/reconcile.ts', 'src/server/mcp-handler.ts',
       'src/server/reconcile-handler.ts', 'src/sources/load.ts', 'src/sources/load-mcp.ts',
       'src/mcp/create-server.ts', 'src/mcp/carbon.ts', 'src/ui/App.tsx', 'src/ui/SourceCard.tsx',
-      'src/ui/ResultsPanel.tsx', 'src/ui/ReconciliationSettings.tsx', 'src/ui/McpConnectDialog.tsx',
+      'src/ui/ResultsPanel.tsx', 'src/ui/AnalyticsReport.tsx', 'src/ui/ReconciliationSettings.tsx', 'src/ui/McpConnectDialog.tsx',
       'src/ui/main.tsx', 'src/core/report.ts', 'src/components/ui/alert.tsx',
       'src/components/ui/data-table.tsx', 'src/components/ui/progress.tsx', 'src/components/ui/spinner.tsx',
     ];
@@ -74,6 +74,11 @@ describe('source security boundaries', () => {
     expect(read('index.html')).toContain('reconcile-agent-icon.png');
     expect(read('app.config.ts')).toContain('.png');
     expect(read('src/ui/ResultsPanel.tsx')).toContain('<Tabs');
+    expect(read('src/ui/ResultsPanel.tsx')).toContain('AnalyticsReport');
+    expect(read('src/ui/AnalyticsReport.tsx')).toContain("type: 'scatter3d'");
+    expect(read('src/ui/AnalyticsReport.tsx')).toContain("type: 'surface'");
+    expect(read('src/ui/AnalyticsReport.tsx')).toContain('cumulativePercent');
+    expect(read('index.html')).toContain('cdn.plot.ly/plotly-');
     expect(read('src/ui/SourceCard.tsx')).toMatch(/onDrop=/);
     expect(read('src/ui/SourceCard.tsx')).toContain('<Alert');
     expect(read('src/ui/ReconciliationSettings.tsx')).toContain('Numeric tolerance');
