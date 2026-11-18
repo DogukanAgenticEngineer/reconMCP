@@ -199,8 +199,8 @@ function Summary({ result }: { result: ReconciliationResult }): ReactElement {
   const rate = matchedRate(result);
   const findingBars = [
     { label: 'Value mismatches', value: summary.valueMismatches },
-    { label: 'Missing in A', value: summary.missingOnLeft },
-    { label: 'Missing in B', value: summary.missingOnRight },
+    { label: 'Missing in A', value: summary.missingOnRight },
+    { label: 'Missing in B', value: summary.missingOnLeft },
     { label: 'Duplicate keys', value: summary.duplicateKeysOnLeft + summary.duplicateKeysOnRight },
     { label: 'Schema differences', value: summary.schemaIssues },
   ];
