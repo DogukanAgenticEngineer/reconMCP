@@ -1,7 +1,9 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { z } from 'zod';
 import { assertResponseSize, compareDatasets, COMPARISON_PREVIEW_LIMIT } from '../core/compare.js';
 import { resultToCsv } from '../core/report.js';
 import type { CompareOptions, ReconciliationResult } from '../core/types.js';
+import { carbonMarkdown, estimateCarbon, type CarbonEstimate } from './carbon.js';
 import { loadMcpSource } from '../sources/load-mcp.js';
 import { mcpCompareInputSchema, mcpSourceSchema, type McpCompareInput } from '../sources/mcp-schemas.js';
 
@@ -31,6 +33,7 @@ External connections are subject to deployment network policy. Do not place cred
 | \`detect_duplicates\` | Find duplicated keys in both sources |
 | \`detect_value_mismatches\` | Show deterministic mapped-value differences |
 | \`generate_report\` | Return structured findings, Markdown and complete CSV text |
+| estimate_operation_carbon | Model a planned call from expected server execution time |
 
 ## Matching
 
@@ -38,9 +41,9 @@ Provide one or more \`keyPairs\` mapping a field in A to a field in B. Optionall
 
 ## Output shape
 
-Each tool returns two complementary views. The text content is a Markdown report with an outcome headline, a metric table, and bounded tables for value differences, missing records, duplicates and schema differences. Source-provided labels, keys and values are rendered as inert inline code, not active Markdown links or HTML. Preview details are explicitly bounded; they are never silently presented as a complete report.
+Each comparison tool returns two complementary views. The text content is a Markdown report with an outcome headline, a metric table, and bounded tables for value differences, missing records, duplicates and schema differences. Source-provided labels, keys and values are rendered as inert inline code, not active Markdown links or HTML. Preview details are explicitly bounded; they are never silently presented as a complete report. Every execution also includes an estimated operational carbon footprint; use estimate_operation_carbon to model a planned call.
 
-The machine-readable structuredContent object uses the schema reconcile.result.v1. Its presentation contains a status (matched or needs_review), a headline, metricCards with labels/values/tones, statusCounts, comparisonPreview, previewTruncated and previewLimit. Canonical totals and full findings remain in summary, missing, duplicates, mismatches and schema. The generate_report tool also returns markdown and complete reportCsv when the whole response fits within 2 MB.
+The machine-readable structuredContent object uses the schema reconcile.result.v1. Its presentation contains a status (matched or needs_review), a headline, metricCards with labels/values/tones, statusCounts, comparisonPreview, previewTruncated and previewLimit. Canonical totals and full findings remain in summary, missing, duplicates, mismatches and schema. A carbonEstimate object is an additive modeled estimate, not metered consumption; it reports elapsed time, assumed power, grid factor and boundary. The generate_report tool also returns markdown and complete reportCsv when the whole response fits within 2 MB.
 
 ## Synthetic example
 
@@ -55,6 +58,10 @@ The machine-readable structuredContent object uses the schema reconcile.result.v
 \`\`\`
 
 Tool results include a client-readable Markdown report and machine-readable structured content. Client rendering varies; the structured fields are the canonical data. Full CSV output is available from \`generate_report\` when it fits within the 2 MB response limit. No result is silently truncated to fit that limit.
+
+## Carbon estimate
+
+Completed comparison calls estimate server-side electricity as elapsed wall time × configured average power, then multiply by the configured grid factor. Defaults are an illustrative 50 W model assumption and 445 g CO2/kWh, the IEA 2024 global electricity-generation intensity. Set RECONCILE_CARBON_ESTIMATED_POWER_W and RECONCILE_CARBON_GRID_INTENSITY_G_CO2_KWH for local/provider assumptions. These estimates are not metered and exclude external sources, network/client energy, data-center overhead/PUE and embodied emissions. estimate_operation_carbon applies the same model to a caller-supplied expected duration (0–15 seconds).
 `;
 
 function publicError(error: unknown): string {
@@ -123,16 +130,24 @@ function response(contentText: string, structuredContent: Record<string, unknown
   return result;
 }
 
-function failed(error: unknown): { content: Array<{ type: 'text'; text: string }>; isError: true } {
-  return { content: [{ type: 'text', text: publicError(error) }], isError: true };
+function failed(error: unknown, carbonEstimate: CarbonEstimate): {
+  content: Array<{ type: 'text'; text: string }>;
+  isError: true;
+  structuredContent: Record<string, unknown>;
+} {
+  return {
+    content: [{ type: 'text', text: `${publicError(error)}\n\n${carbonMarkdown(carbonEstimate)}` }],
+    isError: true,
+    structuredContent: { schemaVersion: 'reconcile.result.v1', carbonEstimate },
+  };
 }
 
-function toolMarkdown(result: ReconciliationResult, focus: string): string {
-  return `${result.markdown}\n\n---\n\n## Requested view\n\n${focus}`;
+function toolMarkdown(result: ReconciliationResult, focus: string, carbonEstimate: CarbonEstimate): string {
+  return `${result.markdown}\n\n---\n\n## Requested view\n\n${focus}\n\n---\n\n${carbonMarkdown(carbonEstimate)}`;
 }
 
 export function createMcpServer(): McpServer {
-  const server = new McpServer({ name: 'Reconcile MCP', version: '1.1.0' });
+  const server = new McpServer({ name: 'Reconcile MCP', version: '1.1.0' }, { maxToolInputElements: 650_000 });
   const baseSchema = mcpCompareInputSchema.shape;
 
   server.registerResource('reconcile_guide', capabilityUri, {
@@ -150,7 +165,7 @@ export function createMcpServer(): McpServer {
       role: 'user',
       content: {
         type: 'text',
-        text: 'Help me reconcile two data sources I am authorized to use. First identify candidate key fields and ask me to confirm ambiguous mappings. Use the supplied tool arguments to map one or more keyPairs and the value fieldPairs to compare. Apply decimal tolerance only when I specify it; keep key matching and value case-sensitivity explicit. Run the deterministic comparison, explain totals and findings from the returned data, and provide the generated CSV report when requested. Never infer findings that are not in the result, never expose credentials, and do not claim that an external MCP client or provider stores no data.',
+        text: 'Help me reconcile two data sources I am authorized to use. First identify candidate key fields and ask me to confirm ambiguous mappings. Use the supplied tool arguments to map one or more keyPairs and the value fieldPairs to compare. Apply decimal tolerance only when I specify it; keep key matching and value case-sensitivity explicit. If the user asks about a planned call carbon footprint, ask for or state a conservative expected server duration and call estimate_operation_carbon before running it. Run the deterministic comparison, then show the returned carbonEstimate and explain that it is modeled, not metered. Explain totals and findings from the returned data, and provide the generated CSV report when requested. Never infer findings that are not in the result, never expose credentials, and do not claim that an external MCP client or provider stores no data.',
       },
     }],
   }));
@@ -163,20 +178,40 @@ export function createMcpServer(): McpServer {
     focus: (result: ReconciliationResult) => string,
   ): void => {
     server.registerTool(name, { title, description, inputSchema: baseSchema, annotations: toolAnnotations }, async (args) => {
+      const startedAt = performance.now();
       try {
         const parsed = mcpCompareInputSchema.parse(args) as McpCompareInput;
         const result = await run(parsed);
+        const carbonEstimate = estimateCarbon(performance.now() - startedAt, 'completed', name);
         const structured = {
           schemaVersion: 'reconcile.result.v1',
           presentation: resultPresentation(result),
+          carbonEstimate,
           ...operation(result),
         };
-        return response(toolMarkdown(result, focus(result)), structured);
+        return response(toolMarkdown(result, focus(result), carbonEstimate), structured);
       } catch (error) {
-        return failed(error);
+        return failed(error, estimateCarbon(performance.now() - startedAt, 'completed', name));
       }
     });
   };
+
+  server.registerTool('estimate_operation_carbon', {
+    title: 'Estimate operation carbon footprint',
+    description: 'Model the MCP server-side carbon footprint before running a comparison. Supply an expected duration from 0 to 15 seconds. This is an estimate, not metered energy or a provider invoice; external sources, network, clients and datacenter overhead are excluded.',
+    inputSchema: {
+      operation: z.enum(['compare_datasets', 'find_missing_records', 'detect_duplicates', 'detect_value_mismatches', 'generate_report']),
+      expectedDurationSeconds: z.number().min(0).max(15).describe('Expected server-side execution duration in seconds; use a conservative estimate when unknown.'),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+  }, async ({ operation, expectedDurationSeconds }) => {
+    const carbonEstimate = estimateCarbon(expectedDurationSeconds * 1_000, 'planned', operation);
+    return response(carbonMarkdown(carbonEstimate), {
+      schemaVersion: 'reconcile.carbon.v1',
+      operation,
+      carbonEstimate,
+    });
+  });
 
   register(
     'compare_datasets',

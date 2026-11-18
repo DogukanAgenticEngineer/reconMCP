@@ -19,12 +19,14 @@ const MCP_TOOLS = [
   'detect_duplicates',
   'detect_value_mismatches',
   'generate_report',
+  'estimate_operation_carbon',
 ];
 
 const OUTPUT_STEPS = [
   { label: 'Outcome', detail: 'Matched or needs review.' },
   { label: 'Metrics', detail: 'Matches, value differences and records only in A or B.' },
   { label: 'Differences', detail: 'Readable Markdown tables with bounded, safely formatted samples.' },
+  { label: 'Carbon estimate', detail: 'Per-call modeled CO2 estimate with its assumptions and system boundary; planned calls can be estimated first.' },
   { label: 'Structured data', detail: 'reconcile.result.v1 for client-native rendering; full CSV via generate_report.' },
 ];
 
@@ -83,7 +85,7 @@ export function McpConnectDialog({ endpoint }: { endpoint: string }): ReactEleme
               </li>
             ))}
           </ol>
-          <p className="mcp-output-note">Every tool returns readable Markdown and structured content. Claude/ChatGPT rendering depends on the client.</p>
+          <p className="mcp-output-note">Every comparison returns a modeled carbon estimate (not metered or a provider invoice). Claude/ChatGPT rendering depends on the client.</p>
         </div>
         <p className="mcp-privacy-note">Requests are processed in memory and not saved by the app. Hosting-provider infrastructure logging may be outside the app’s control.</p>
       </DialogContent>
