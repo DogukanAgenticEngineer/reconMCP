@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { assertResponseSize, compareDatasets, COMPARISON_PREVIEW_LIMIT } from '../core/compare.js';
 import { resultToCsv } from '../core/report.js';
 import type { CompareOptions, ReconciliationResult } from '../core/types.js';
-import { inferFieldPairs } from '../core/matching.js';
+import { inferFieldPairs, inferKeyPairs } from '../core/matching.js';
 import { carbonMarkdown, estimateCarbon, type CarbonEstimate } from './carbon.js';
 import { loadMcpSource } from '../sources/load-mcp.js';
 import { mcpCompareInputSchema, mcpSourceSchema, type McpCompareInput } from '../sources/mcp-schemas.js';
@@ -80,7 +80,7 @@ type IntelligentResult = ReconciliationResult & { matching: { mode: 'automatic' 
 async function run(input: McpCompareInput): Promise<IntelligentResult> {
   const [left, right] = await Promise.all([loadMcpSource(input.left), loadMcpSource(input.right)]);
   const inferred = inferFieldPairs(left.columns, right.columns);
-  const keyPairs = input.keyPairs?.length ? input.keyPairs : inferred.filter(({ left: name }) => /(^id$|uuid|customer|client|invoice|transaction|order|record|reference|code)/i.test(name)).slice(0, 1);
+  const keyPairs = input.keyPairs?.length ? input.keyPairs : inferKeyPairs(inferred);
   if (!keyPairs.length) throw new Error('Otomatik anahtar alanı belirlenemedi. Lütfen keyPairs alanını açıkça belirtin.');
   const fieldPairs = input.fieldPairs ?? inferred.filter((pair) => !keyPairs.some((key) => key.left === pair.left || key.right === pair.right));
   const result = compareDatasets(left, right, { ...input, keyPairs, fieldPairs } as CompareOptions);

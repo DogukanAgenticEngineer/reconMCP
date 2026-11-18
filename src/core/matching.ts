@@ -1,13 +1,11 @@
 const ALIAS_GROUPS = [
-  ['customerid', 'customer', 'clientid', 'clientcode', 'custid'],
-  ['invoiceid', 'invoiceno', 'invoice', 'billno', 'billingid'],
+  ['customerid', 'clientid', 'custid', 'customerkey', 'clientkey'],
+  ['invoiceid', 'invoiceno', 'billno', 'billingid'],
   ['transactionid', 'txnid', 'transactionno', 'paymentid'],
   ['orderid', 'orderno', 'purchaseorderid'],
   ['recordid', 'rowid', 'entryid'],
-  ['email', 'emailaddress', 'mail'],
+  ['email', 'emailaddress'],
   ['phonenumber', 'phone', 'mobile', 'telephone'],
-  ['amount', 'totalamount', 'netamount', 'value', 'price'],
-  ['date', 'createdat', 'transactiondate', 'invoicedate', 'orderdate'],
 ] as const;
 
 export function canonicalColumnName(name: string): string {
@@ -28,4 +26,12 @@ export function inferFieldPairs(leftColumns: string[], rightColumns: string[]): 
     usedRight.add(right);
     return [{ left, right }];
   });
+}
+
+export function inferKeyPairs(pairs: Array<{ left: string; right: string }>): Array<{ left: string; right: string }> {
+  const priority = ['id', 'uuid', 'recordid', 'customerid', 'invoiceid', 'transactionid', 'orderid'];
+  return pairs
+    .filter(({ left }) => priority.includes(canonicalColumnName(left)))
+    .sort((a, b) => priority.indexOf(canonicalColumnName(a.left)) - priority.indexOf(canonicalColumnName(b.left)))
+    .slice(0, 1);
 }
