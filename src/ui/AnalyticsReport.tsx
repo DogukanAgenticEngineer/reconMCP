@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { animate, stagger } from 'animejs';
 import type { ReactElement } from 'react';
 import { Activity, BarChart3, Boxes, ChartNoAxesCombined, Layers3 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge.js';
@@ -145,7 +146,29 @@ function buildAnalytics(result: ReconciliationResult): { charts: ChartModel[]; m
 export function AnalyticsReport({ result }: AnalyticsReportProps): ReactElement {
   const [plotlyReady, setPlotlyReady] = useState(Boolean(window.Plotly));
   const nodes = useRef<Array<HTMLDivElement | null>>([]);
+  const reportRef = useRef<HTMLElement>(null);
   const analysis = useMemo(() => buildAnalytics(result), [result]);
+
+  useEffect(() => {
+    const root = reportRef.current;
+    if (!root || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const animations = ['.analytics-kpi-grid', '.analytics-chart-grid'].flatMap((selector) => {
+      const grid = root.querySelector<HTMLElement>(selector);
+      if (!grid) return [];
+      const items = Array.from(grid.children).filter((item): item is HTMLElement => item instanceof HTMLElement);
+      if (items.length === 0) return [];
+      const columns = Math.max(1, getComputedStyle(grid).gridTemplateColumns.split(' ').length);
+      const rows = Math.ceil(items.length / columns);
+      return [animate(items, {
+        opacity: [0, 1],
+        y: [14, 0],
+        delay: stagger(75, { grid: [columns, rows], from: 'center', axis: 'x' }),
+        duration: 650,
+        ease: 'outExpo',
+      })];
+    });
+    return () => animations.forEach((animation) => animation.pause());
+  }, [result]);
 
   useEffect(() => {
     if (window.Plotly) { setPlotlyReady(true); return; }
@@ -179,7 +202,7 @@ export function AnalyticsReport({ result }: AnalyticsReportProps): ReactElement 
     + result.duplicates.left.length + result.duplicates.right.length
     + result.schema.onlyOnLeft.length + result.schema.onlyOnRight.length;
   return (
-    <section className="analytics-report" aria-label="Adaptive statistical analytics report">
+    <section ref={reportRef} className="analytics-report" aria-label="Adaptive statistical analytics report">
       <div className="analytics-report-header">
         <div>
           <div className="analytics-eyebrow"><Activity size={14} /> ADAPTIVE STATISTICAL ANALYTICS</div>
