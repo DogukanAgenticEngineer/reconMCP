@@ -58,6 +58,7 @@ describe('source security boundaries', () => {
     }
     const html = read('index.html');
     expect(html).not.toMatch(/analytics|tracking|telemetry/i);
+    expect(read('vercel.json')).toContain("script-src 'self' https://cdn.plot.ly");
 
     const app = read('src/ui/App.tsx');
     const connect = read('src/ui/McpConnectDialog.tsx');
