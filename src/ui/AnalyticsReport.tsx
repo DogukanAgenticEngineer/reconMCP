@@ -20,6 +20,7 @@ interface AnalyticsReportProps { result: ReconciliationResult }
 
 const number = (value: number): string => value.toLocaleString(undefined, { maximumFractionDigits: 2 });
 const compactKey = (value: string): string => value.length > 42 ? `${value.slice(0, 39)}…` : value;
+const escapeHtml = (value: string): string => value.replace(/[&<>\"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', "'": '&#39;' })[character] ?? character);
 
 export function AnalyticsReport({ result }: AnalyticsReportProps): ReactElement {
   const scatterRef = useRef<HTMLDivElement>(null);
@@ -61,7 +62,7 @@ export function AnalyticsReport({ result }: AnalyticsReportProps): ReactElement 
         scatterX.push(surfaceFields.get(field) ?? Math.min(surfaceFields.size, 13));
         scatterY.push(rowIndex);
         scatterZ.push(delta);
-        scatterText.push(`Key: ${compactKey(key)}<br>Field: ${field}<br>A: ${String(item.leftValue ?? '—')}<br>B: ${String(item.rightValue ?? '—')}`);
+        scatterText.push(`Key: ${escapeHtml(compactKey(key))}<br>Field: ${escapeHtml(field)}<br>A: ${escapeHtml(String(item.leftValue ?? '—'))}<br>B: ${escapeHtml(String(item.rightValue ?? '—'))}`);
       }
     });
 
@@ -124,12 +125,12 @@ export function AnalyticsReport({ result }: AnalyticsReportProps): ReactElement 
         },
       }, config),
       plotly.newPlot(nodes[1], [{
-        type: 'surface', x: analysis.segmentLabels, y: analysis.surfaceLabels, z: analysis.surfaceZ,
-        colorscale: 'Portland', showscale: true, hovertemplate: 'Field: %{y}<br>%{x}<br>Mismatch count: %{z}<extra></extra>',
+        type: 'surface', x: analysis.segmentLabels.map((_, index) => index + 1), y: analysis.surfaceLabels.map((_, index) => index + 1), z: analysis.surfaceZ,
+        colorscale: 'Portland', showscale: true, hovertemplate: 'Field index: %{y}<br>Segment: %{x}<br>Mismatch count: %{z}<extra></extra>',
       }], {
         ...commonLayout, margin: { l: 8, r: 8, t: 20, b: 8 },
         scene: {
-          xaxis: { title: 'Record segments', gridcolor: gridColor }, yaxis: { title: 'Fields', gridcolor: gridColor },
+          xaxis: { title: 'Record segments', tickmode: 'array', tickvals: analysis.segmentLabels.map((_, index) => index + 1), ticktext: analysis.segmentLabels, gridcolor: gridColor }, yaxis: { title: 'Fields', tickmode: 'array', tickvals: analysis.surfaceLabels.map((_, index) => index + 1), ticktext: analysis.surfaceLabels, gridcolor: gridColor },
           zaxis: { title: 'Mismatch count', gridcolor: gridColor }, camera: { eye: { x: 1.55, y: 1.55, z: 1.05 } },
         },
       }, config),
