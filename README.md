@@ -100,6 +100,13 @@ GitHub Actions `.github/workflows/quality.yml` her push ve PR'da strict typechec
 
 Vercel Hobby projesi `recon-mcp`, bu GitHub repository'sine bağlıdır; install `pnpm install --frozen-lockfile`, build `pnpm build`, output `dist` kullanır. Production branch `main`'e yalnız zorunlu `quality` kontrolü başarılı PR merge'iyle güncelleme yapılır ve GitHub bağlantısı Vercel production deployment'ını otomatik tetikler; PR preview'ları SSO korumalıdır. Ağ kaynakları kullanacaksanız Vercel ortamına yalnız gerekli hostları `RECONCILE_ALLOWED_HOSTS` ve izinli DB portlarını `RECONCILE_ALLOWED_POSTGRES_PORTS` olarak girin; bağlantı gizli anahtarlarını repository'ye commit etmeyin. Boş allow-list ağ kaynaklarını reddeder. Uygulama analytics/telemetry kullanmaz; veritabanı/storage kurulumu yoktur.
 
+## Policies and support
+
+- [Privacy Policy](https://recon-mcp-dgn15.vercel.app/privacy.html)
+- [Terms of Service](https://recon-mcp-dgn15.vercel.app/terms.html)
+- [Support and bug reports](https://github.com/DogukanAgenticEngineer/reconMCP/issues)
+- [Demo recording checklist](docs/demo-recording-checklist.md) — the public demo video still needs to be recorded and published by the maintainer.
+
 ## Güvenlik ve gizlilik
 
 Ayrıntılar: [SECURITY.md](SECURITY.md), [THREAT_MODEL.md](THREAT_MODEL.md), [PRIVACY.md](PRIVACY.md), [DATA_RETENTION.md](DATA_RETENTION.md). Mutabakat hukuki/finansal uyum sertifikası değildir. Verinin yasal işleme dayanağı ve altyapı/hesap planı sorumluluğu dağıtımı yapan kişidedir.
