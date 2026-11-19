@@ -614,6 +614,11 @@ function App(): ReactElement {
           <footer className="page-footer">
             <span>{MAX_FILE_BYTES / 1024 / 1024} MB per file · 10,000 rows per source · in-memory processing</span>
             <span>{MAX_COMBINED_BYTES / 1024 / 1024} MB request limit</span>
+            <nav aria-label="Legal and support links" className="footer-links">
+              <a href="/privacy.html">Privacy Policy</a>
+              <a href="/terms.html">Terms of Service</a>
+              <a href="https://github.com/DogukanAgenticEngineer/reconMCP/issues" target="_blank" rel="noreferrer">Support</a>
+            </nav>
           </footer>
         </div>
       </div>
