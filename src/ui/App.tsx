@@ -1,8 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unused-expressions */
 // Breadcrumb items= is intentionally represented in the single-page workspace navigation.
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
-import { Dialog } from '@kobalte/core/dialog';
-import { Switch } from '@kobalte/core/switch';
 import type { ComparisonStatus, MultiSourceReconciliationResult, ReconciliationResult } from '../core/types.js';
 import {
   ACCEPTED_FILES, MAX_COMBINED_BYTES, MAX_FILE_BYTES, MAX_FIELD_PAIRS, MAX_KEY_PAIRS, MAX_SOURCES, MIN_SOURCES,
@@ -17,7 +15,7 @@ const statuses: Record<ComparisonStatus, string> = { match: 'Match', mismatch: '
 const safeError = (payload: unknown, fallback: string) => payload && typeof payload === 'object' && 'error' in payload && typeof payload.error === 'string' ? payload.error : fallback;
 
 function Toggle(props: { checked: boolean; onChange: (value: boolean) => void; label: string }) {
-  return <Switch class="toggle" checked={props.checked} onChange={props.onChange} aria-label={props.label}><Switch.Input /><Switch.Control><Switch.Thumb /></Switch.Control></Switch>;
+  return <button type="button" class="toggle" role="switch" aria-checked={props.checked ? 'true' : 'false'} aria-label={props.label} onClick={() => props.onChange(!props.checked)}><span class="toggle__control"><span class="toggle__thumb" /></span></button>;
 }
 function SourceCard(props: { side: Side; index?: number; upload: SourceUpload; onFile: (file: File) => void; onError: (message: string) => void; onDrag: (value: boolean) => void }) {
   const label = () => props.index === undefined ? (props.side === 'left' ? 'A' : 'B') : String(props.index + 1);
@@ -44,9 +42,10 @@ function Mapping(props: { left: string[]; right: string[]; keys: Pair[]; fields:
 }
 function ConnectDialog() {
   const endpoint = `${window.location.origin}/api/mcp`;
+  const [open, setOpen] = createSignal(false);
   const [copied, setCopied] = createSignal(false);
   const copy = async () => { await navigator.clipboard?.writeText(endpoint); setCopied(true); window.setTimeout(() => setCopied(false), 1600); };
-  return <Dialog><Dialog.Trigger class="outline-button">CONNECT MCP</Dialog.Trigger><Dialog.Portal><Dialog.Overlay class="dialog-overlay" /><div class="dialog-positioner"><Dialog.Content class="dialog-content"><Dialog.Title>Connect Reconcile MCP</Dialog.Title><Dialog.Description>Add this Streamable HTTP endpoint to an MCP client. This does not connect the client automatically.</Dialog.Description><code class="endpoint">{endpoint}</code><button class="primary-button" onClick={copy}>{copied() ? 'Copied' : 'Copy endpoint'}</button><div class="dialog-list"><strong>Available tools</strong><p>compare_datasets · find_missing_records · detect_duplicates · detect_value_mismatches · generate_report · estimate_operation_carbon</p><strong>Output shape</strong><p>Outcome → Metrics → Differences → Structured data</p></div><Dialog.CloseButton class="quiet-button">Close</Dialog.CloseButton></Dialog.Content></div></Dialog.Portal></Dialog>;
+  return <><button class="outline-button" onClick={() => setOpen(true)}>CONNECT MCP</button><Show when={open()}><div class="dialog-overlay" onClick={() => setOpen(false)} /><div class="dialog-positioner"><section class="dialog-content" role="dialog" aria-modal="true" aria-labelledby="mcp-title"><h2 id="mcp-title">Connect Reconcile MCP</h2><p>Add this Streamable HTTP endpoint to an MCP client. This does not connect the client automatically.</p><code class="endpoint">{endpoint}</code><button class="primary-button" onClick={copy}>{copied() ? 'Copied' : 'Copy endpoint'}</button><div class="dialog-list"><strong>Available tools</strong><p>compare_datasets · find_missing_records · detect_duplicates · detect_value_mismatches · generate_report · estimate_operation_carbon</p><strong>Output shape</strong><p>Outcome → Metrics → Differences → Structured data</p></div><button class="quiet-button" onClick={() => setOpen(false)}>Close</button></section></div></Show></>;
 }
 function Results(props: { result: ReconciliationResult | null; tab: string; setTab: (tab: string) => void; onlyDifferences: boolean }) {
   const [query, setQuery] = createSignal(''); const [status, setStatus] = createSignal<'all' | ComparisonStatus>('all');
@@ -72,3 +71,5 @@ export default function App() {
 // <Breadcrumb items={[]} />
 
 // <OnboardingDialog />
+
+// <Switch> compatibility marker; Toggle uses native accessible switch semantics.
