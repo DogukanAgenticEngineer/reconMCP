@@ -1,13 +1,6 @@
-import React from 'react';
-import { createRoot } from 'react-dom/client';
+import { render } from '@solidjs/web';
 import './styles.css';
 import App from './App.js';
-
 const root = document.getElementById('root');
 if (!root) throw new Error('Uygulama kökü bulunamadı.');
-
-createRoot(root).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
-);
+render(() => <App />, root);
