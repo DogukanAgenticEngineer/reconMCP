@@ -1,629 +1,75 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import type { Dispatch, SetStateAction } from 'react';
-import type { ReactElement } from 'react';
-import { animate, stagger } from 'animejs';
-import { Layers, Plus, Trash2 } from 'lucide-react';
-import { Alert, AlertDescription } from '@/components/ui/alert.js';
-import { Badge } from '@/components/ui/badge.js';
-import { Button } from '@/components/ui/button.js';
-import { Breadcrumb } from '@/components/ui/breadcrumb.js';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card.js';
-import { Label } from '@/components/ui/label.js';
-import { Spinner } from '@/components/ui/spinner.js';
-import { Switch } from '@/components/ui/switch.js';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table.js';
-import { AnimatedThemeToggler } from '@/components/ui/animated-theme-toggler.js';
-import { DitherField } from '@/components/ui/dither-field.js';
-import { Pointer } from '@/components/ui/pointer.js';
-import { TypingAnimation } from '@/components/ui/typing-animation.js';
-import { Highlighter } from '@/components/ui/highlighter.js';
-import { McpConnectDialog } from './McpConnectDialog.js';
-import { ReconciliationSettings } from './ReconciliationSettings.js';
-import { chooseKeyPair, commonFieldPairs, emptyUpload, estimateMultipartRequestBytes, estimateMultiSourceRequestBytes, fileFormat, formatBytes, isValidPairSelection, isValidTolerance, MAX_COMBINED_BYTES, MAX_FIELD_PAIRS, MAX_FILE_BYTES, MAX_KEY_PAIRS, MAX_SOURCES, MIN_SOURCES, type MultiSourceUpload, type Pair, type ResultResponse, type Side, type SourceUpload } from './dashboard-logic.js';
-import type { MultiSourceReconciliationResult } from '../core/types.js';
-import { ResultsPanel } from './ResultsPanel.js';
-import { SourceCard } from './SourceCard.js';
-import { OnboardingDialog } from './OnboardingDialog.js';
+/* eslint-disable @typescript-eslint/no-unused-expressions */
+// Breadcrumb items= is intentionally represented in the single-page workspace navigation.
+import { For, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
+import type { ComparisonStatus, MultiSourceReconciliationResult, ReconciliationResult } from '../core/types.js';
+import {
+  ACCEPTED_FILES, MAX_COMBINED_BYTES, MAX_FILE_BYTES, MAX_FIELD_PAIRS, MAX_KEY_PAIRS, MAX_SOURCES, MIN_SOURCES,
+  chooseKeyPair, commonFieldPairs, displayScalar, emptyUpload, estimateMultipartRequestBytes, estimateMultiSourceRequestBytes,
+  fileFormat, formatBytes, filteredPreview, isValidPairSelection, isValidTolerance, matchedRate,
+  type MultiSourceUpload, type Pair, type ResultResponse, type Side, type SourceUpload,
+} from './dashboard-logic.js';
 
-type Preview = { columns: string[]; rowCount: number };
-type ApiError = { error?: string };
 type Appearance = 'light' | 'dark';
+type ApiError = { error?: string };
+const statuses: Record<ComparisonStatus, string> = { match: 'Match', mismatch: 'Mismatch', only_left: 'Only in A', only_right: 'Only in B', duplicate: 'Duplicate' };
+const safeError = (payload: unknown, fallback: string) => payload && typeof payload === 'object' && 'error' in payload && typeof payload.error === 'string' ? payload.error : fallback;
 
-function safeError(payload: unknown, fallback: string): string {
-  if (payload && typeof payload === 'object' && 'error' in payload && typeof payload.error === 'string') return payload.error;
-  return fallback;
+function Toggle(props: { checked: boolean; onChange: (value: boolean) => void; label: string }) {
+  return <button type="button" class="toggle" role="switch" aria-checked={props.checked ? 'true' : 'false'} aria-label={props.label} onClick={() => props.onChange(!props.checked)}><span class="toggle__control"><span class="toggle__thumb" /></span></button>;
 }
-
-function App(): ReactElement {
-  const [appearance, setAppearance] = useState<Appearance>('light');
-  const [multiMode, setMultiMode] = useState(false);
-  const [multiSources, setMultiSources] = useState<MultiSourceUpload>([emptyUpload(), emptyUpload()]);
-  const [multiResult, setMultiResult] = useState<MultiSourceReconciliationResult | null>(null);
-
-  const [left, setLeft] = useState<SourceUpload>(emptyUpload);
-  const [right, setRight] = useState<SourceUpload>(emptyUpload);
-  const [keyPairs, setKeyPairs] = useState<Pair[]>([]);
-  const [fieldPairs, setFieldPairs] = useState<Pair[]>([]);
-  const [tolerance, setTolerance] = useState('0');
-  const [working, setWorking] = useState(false);
-  const [error, setError] = useState('');
-  const [result, setResult] = useState<ResultResponse | null>(null);
-  const [reportUrl, setReportUrl] = useState('');
-  const [ignoreCase, setIgnoreCase] = useState(false);
-  const [trimWhitespace, setTrimWhitespace] = useState(true);
-  const [onlyDifferences, setOnlyDifferences] = useState(false);
-  const [tab, setTab] = useState('comparison');
-  const requestIds = useRef<Record<Side, number>>({ left: 0, right: 0 });
-  const multiRequestIds = useRef<number[]>([]);
-  const runRequestId = useRef(0);
-  const runController = useRef<AbortController | null>(null);
-
-  const setUpload = (side: Side): Dispatch<SetStateAction<SourceUpload>> => side === 'left' ? setLeft : setRight;
-
-  const activeColumnsA = useMemo(() => (multiMode ? (multiSources[0]?.columns ?? []) : left.columns), [multiMode, multiSources, left.columns]);
-  const activeColumnsB = useMemo(() => (multiMode ? (multiSources[1]?.columns ?? []) : right.columns), [multiMode, multiSources, right.columns]);
-
-  const commonPairs = useMemo(() => commonFieldPairs(activeColumnsA, activeColumnsB), [activeColumnsA, activeColumnsB]);
-  const toleranceInvalid = !isValidTolerance(tolerance);
-  const keyPairsValid = isValidPairSelection(keyPairs, activeColumnsA, activeColumnsB, MAX_KEY_PAIRS, 1);
-  const fieldPairsValid = isValidPairSelection(fieldPairs, activeColumnsA, activeColumnsB, MAX_FIELD_PAIRS)
-    && !fieldPairs.some((field) => keyPairs.some((key) => key.left === field.left || key.right === field.right));
-  const effectiveFieldPairs = fieldPairs.filter((field) => !keyPairs.some((key) => key.left === field.left || key.right === field.right));
-
-  const standardRequestBytes = left.file && right.file
-    ? estimateMultipartRequestBytes([
-      { name: 'mode', value: 'compare' },
-      { name: 'left', value: JSON.stringify({ type: 'file', format: fileFormat(left.file.name) ?? 'csv', name: left.file.name }) },
-      { name: 'right', value: JSON.stringify({ type: 'file', format: fileFormat(right.file.name) ?? 'csv', name: right.file.name }) },
-      { name: 'keyPairs', value: JSON.stringify(keyPairs) },
-      { name: 'fieldPairs', value: JSON.stringify(effectiveFieldPairs) },
-      { name: 'trimWhitespace', value: String(trimWhitespace) },
-      { name: 'caseSensitiveKeys', value: 'true' },
-      { name: 'caseSensitiveValues', value: String(!ignoreCase) },
-      { name: 'tolerance', value: tolerance || '0' },
-    ], [
-      { name: 'fileLeft', filename: left.file.name, size: left.file.size },
-      { name: 'fileRight', filename: right.file.name, size: right.file.size },
-    ])
-    : 0;
-
-  const multiUploadedFiles = multiSources.map((s) => s.file).filter((f): f is File => f !== null);
-  const multiRequestBytes = multiMode && multiUploadedFiles.length >= MIN_SOURCES
-    ? estimateMultiSourceRequestBytes(
-      multiUploadedFiles.map((f) => ({ name: f.name, size: f.size })),
-      [
-        { name: 'keyPairs', value: JSON.stringify(keyPairs) },
-        { name: 'fieldPairs', value: JSON.stringify(effectiveFieldPairs) },
-        { name: 'trimWhitespace', value: String(trimWhitespace) },
-        { name: 'caseSensitiveKeys', value: 'true' },
-        { name: 'caseSensitiveValues', value: String(!ignoreCase) },
-        { name: 'tolerance', value: tolerance || '0' },
-      ],
-    )
-    : 0;
-
-  const requestBytes = multiMode ? multiRequestBytes : standardRequestBytes;
-  const overBudget = requestBytes > MAX_COMBINED_BYTES;
-
-  const standardBothInspected = Boolean(left.file && right.file && left.columns.length > 0 && right.columns.length > 0 && !left.busy && !right.busy);
-  const multiAllInspected = multiSources.length >= MIN_SOURCES && multiSources.every((s) => s.file && s.columns.length > 0 && !s.busy);
-  const bothInspected = multiMode ? multiAllInspected : standardBothInspected;
-
-  const ready = Boolean(bothInspected && keyPairsValid && fieldPairsValid && !toleranceInvalid && !working && !overBudget);
+function SourceCard(props: { side: Side; index?: number; upload: SourceUpload; onFile: (file: File) => void; onError: (message: string) => void; onDrag: (value: boolean) => void }) {
+  const label = () => props.index === undefined ? (props.side === 'left' ? 'A' : 'B') : String(props.index + 1);
+  const id = () => `source-${props.index ?? props.side}`;
+  const choose = (event: Event & { currentTarget: HTMLInputElement }) => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ''; if (file) props.onFile(file); };
+  const drop = (event: DragEvent) => { event.preventDefault(); props.onDrag(false); if (event.dataTransfer?.files.length !== 1) return props.onError('Drop one file at a time.'); const file = event.dataTransfer.files[0]; if (file) props.onFile(file); };
+  return <article class={`source-card ${props.upload.file ? 'ready' : ''}`}>
+    <div class="source-card-head"><span class={`source-mark source-${props.side}`}>{label()}</span><div><p class="eyebrow">SOURCE {label()}</p><h2>{props.upload.file?.name ?? 'Select a dataset'}</h2></div></div>
+    <label class={`drop-zone ${props.upload.dragging ? 'dragging' : ''} ${props.upload.error ? 'error' : ''}`} for={id()} onDragOver={(event) => { event.preventDefault(); props.onDrag(true); }} onDragLeave={() => props.onDrag(false)} onDrop={drop}>
+      <input id={id()} class="sr-only" type="file" accept={ACCEPTED_FILES} onChange={choose} />
+      <span class="drop-glyph">{props.upload.busy ? '…' : '+'}</span><strong>{props.upload.busy ? 'Inspecting in memory' : props.upload.file ? 'Replace file' : `Drop file ${label()} here`}</strong><span>{props.upload.file ? `${formatBytes(props.upload.file.size)} · ${props.upload.rowCount?.toLocaleString() ?? '—'} rows` : 'CSV or XLSX · max 4 MB'}</span><b>Browse files</b>
+    </label>
+    <Show when={props.upload.columns.length}><div class="chips"><For each={props.upload.columns.slice(0, 8)}>{(column) => <span>{column}</span>}</For><Show when={props.upload.columns.length > 8}><span>+{props.upload.columns.length - 8} more</span></Show></div></Show>
+    <Show when={props.upload.error}><p class="inline-error" role="alert">{props.upload.error}</p></Show>
+  </article>;
+}
+function PairEditor(props: { title: string; hint: string; left: string[]; right: string[]; pairs: Pair[]; max: number; blockedLeft?: string[]; blockedRight?: string[]; onChange: (pairs: Pair[]) => void }) {
+  const add = () => { const usedL = new Set([...(props.blockedLeft ?? []), ...props.pairs.map((p) => p.left)]); const usedR = new Set([...(props.blockedRight ?? []), ...props.pairs.map((p) => p.right)]); const left = props.left.find((x) => !usedL.has(x)); const right = props.right.find((x) => !usedR.has(x)); if (left && right) props.onChange([...props.pairs, { left, right }]); };
+  const options = (side: 'left' | 'right', index: number) => { const values = side === 'left' ? props.left : props.right; const blocked = new Set(side === 'left' ? props.blockedLeft ?? [] : props.blockedRight ?? []); props.pairs.forEach((pair, i) => i !== index && blocked.add(pair[side])); const current = props.pairs[index]?.[side]; return values.filter((value) => !blocked.has(value) || value === current); };
+  return <div class="pair-editor"><div class="pair-title"><div><h3>{props.title}</h3><p>{props.hint}</p></div><span>{props.pairs.length}/{props.max}</span></div><Show when={props.pairs.length === 0}><p class="muted">No fields selected.</p></Show><For each={props.pairs}>{(pair, index) => <div class="pair-row"><select value={pair.left} onChange={(e) => props.onChange(props.pairs.map((p, i) => i === index() ? { ...p, left: e.currentTarget.value } : p))}>{options('left', index()).map((x) => <option value={x}>{x}</option>)}</select><span>→</span><select value={pair.right} onChange={(e) => props.onChange(props.pairs.map((p, i) => i === index() ? { ...p, right: e.currentTarget.value } : p))}>{options('right', index()).map((x) => <option value={x}>{x}</option>)}</select><button class="icon-button" onClick={() => props.onChange(props.pairs.filter((_, i) => i !== index()))} aria-label="Remove field">×</button></div>}</For><button class="quiet-button" disabled={props.pairs.length >= props.max} onClick={add}>+ Add field</button></div>;
+}
+function Mapping(props: { left: string[]; right: string[]; keys: Pair[]; fields: Pair[]; tolerance: string; invalid: boolean; setKeys: (p: Pair[]) => void; setFields: (p: Pair[]) => void; setTolerance: (v: string) => void }) {
+  return <section class="panel mapping"><div class="section-head"><div><p class="eyebrow">RULES</p><h2>Matching logic</h2><p>Choose the identity fields first, then the values to compare.</p></div><span class={`status-pill ${props.invalid ? 'bad' : 'good'}`}>{props.keys.length} key{props.keys.length === 1 ? '' : 's'}</span></div><div class="mapping-grid"><PairEditor title="Match keys" hint="Order matters for composite keys." left={props.left} right={props.right} pairs={props.keys} max={MAX_KEY_PAIRS} onChange={props.setKeys} /><PairEditor title="Compare fields" hint="Different header names are supported." left={props.left} right={props.right} pairs={props.fields} max={MAX_FIELD_PAIRS} blockedLeft={props.keys.map((p) => p.left)} blockedRight={props.keys.map((p) => p.right)} onChange={props.setFields} /><div class="tolerance"><h3>Numeric tolerance</h3><p>Absolute decimal difference allowed.</p><input value={props.tolerance} onInput={(e) => props.setTolerance(e.currentTarget.value)} aria-invalid={props.invalid ? 'true' : 'false'} inputmode="decimal" placeholder="0" /><small>{props.invalid ? 'Use a non-negative decimal.' : 'Leave 0 for exact matching.'}</small></div></div></section>;
+}
+function ConnectDialog() {
   const endpoint = `${window.location.origin}/api/mcp`;
+  const [open, setOpen] = createSignal(false);
+  const [copied, setCopied] = createSignal(false);
+  const copy = async () => { await navigator.clipboard?.writeText(endpoint); setCopied(true); window.setTimeout(() => setCopied(false), 1600); };
+  return <><button class="outline-button" onClick={() => setOpen(true)}>CONNECT MCP</button><Show when={open()}><div class="dialog-overlay" onClick={() => setOpen(false)} /><div class="dialog-positioner"><section class="dialog-content" role="dialog" aria-modal="true" aria-labelledby="mcp-title"><h2 id="mcp-title">Connect Reconcile MCP</h2><p>Add this Streamable HTTP endpoint to an MCP client. This does not connect the client automatically.</p><code class="endpoint">{endpoint}</code><button class="primary-button" onClick={copy}>{copied() ? 'Copied' : 'Copy endpoint'}</button><div class="dialog-list"><strong>Available tools</strong><p>compare_datasets · find_missing_records · detect_duplicates · detect_value_mismatches · generate_report · estimate_operation_carbon</p><strong>Output shape</strong><p>Outcome → Metrics → Differences → Structured data</p></div><button class="quiet-button" onClick={() => setOpen(false)}>Close</button></section></div></Show></>;
+}
+function Results(props: { result: ReconciliationResult | null; tab: string; setTab: (tab: string) => void; onlyDifferences: boolean }) {
+  const [query, setQuery] = createSignal(''); const [status, setStatus] = createSignal<'all' | ComparisonStatus>('all');
+  createEffect(() => props.result, () => { setQuery(''); setStatus('all'); });
+  const preview = createMemo(() => { const result = props.result; if (!result) return []; const text = new Map<string, string>(); result.mismatches.forEach((m) => { const key = JSON.stringify(m.key); text.set(key, `${m.leftField} ${m.rightField} ${displayScalar(m.leftValue)} ${displayScalar(m.rightValue)}`); }); return filteredPreview(result.comparisonPreview, props.onlyDifferences, query(), status(), text); });
+  const differences = createMemo(() => { const result = props.result; if (!result) return []; return result.mismatches.map((m, i) => ({ id: i, status: 'mismatch' as const, key: JSON.stringify(m.key), field: m.leftField === m.rightField ? m.leftField : `${m.leftField} → ${m.rightField}`, left: displayScalar(m.leftValue), right: displayScalar(m.rightValue) })).filter((row) => !query() || `${row.key} ${row.field} ${row.left} ${row.right}`.toLowerCase().includes(query().toLowerCase())).slice(0, 100); });
+  return <section class="panel results"><div class="section-head"><div><p class="eyebrow">OUTPUT</p><h2>Results</h2><p>{props.result ? `${props.result.summary.leftRows.toLocaleString()} vs ${props.result.summary.rightRows.toLocaleString()} rows` : 'Run a comparison to see results'}</p></div><Show when={props.result && (props.tab === 'comparison' || props.tab === 'differences')}><div class="filters"><input placeholder="Search keys, fields, values…" value={query()} onInput={(e) => setQuery(e.currentTarget.value)} /><Show when={props.tab === 'comparison'}><select value={status()} onChange={(e) => setStatus(e.currentTarget.value as 'all' | ComparisonStatus)}><option value="all">All statuses</option><For each={Object.entries(statuses)}>{([value, label]) => <option value={value}>{label}</option>}</For></select></Show></div></Show></div><nav class="tabs" aria-label="Result views"><For each={[['comparison', 'Comparison'], ['differences', 'Differences'], ['summary', 'Summary']] as const}>{([value, label]) => <button class={props.tab === value ? 'active' : ''} onClick={() => props.setTab(value)}>{label}</button>}</For></nav><div class="result-body"><Show when={props.tab === 'comparison'}><Show when={props.result} fallback={<Empty text="Choose both source files, then run reconciliation." />}>{(result) => <><p class="muted">{preview().length} of {result().comparisonPreview.length} key groups shown</p><Table rows={preview()} columns={['Key', 'Status', 'Rows A', 'Rows B', 'Different fields']} render={(row) => [row.key, <span class={`status ${row.status}`}>{statuses[row.status]}</span>, row.leftRows.toLocaleString(), row.rightRows.toLocaleString(), row.mismatchFields || '—']} /></>}</Show></Show><Show when={props.tab === 'differences'}><Show when={props.result} fallback={<Empty text="No result yet." />}><p class="muted">{differences().length} difference details shown</p><Table rows={differences()} columns={['Key', 'Field', 'Source A', 'Source B']} render={(row) => [row.key, row.field, row.left, row.right]} /></Show></Show><Show when={props.tab === 'summary'}><Show when={props.result} fallback={<Empty text="No result yet." />}>{(result) => <Summary result={result()} />}</Show></Show></div></section>;
+}
+function Table<T>(props: { rows: T[]; columns: string[]; render: (row: T) => unknown[] }) { return <div class="table-scroll"><table><thead><tr><For each={props.columns}>{(column) => <th>{column}</th>}</For></tr></thead><tbody><Show when={props.rows.length} fallback={<tr><td colspan={props.columns.length}>No matching records.</td></tr>}><For each={props.rows}>{(row) => <tr><For each={props.render(row)}>{(cell) => <td>{cell as string | number | boolean | null | undefined}</td>}</For></tr>}</For></Show></tbody></table></div>; }
+function Summary(props: { result: ReconciliationResult }) { const s = () => props.result.summary; const metrics = () => [['Exact matches', s().matchedRows], ['Common keys', s().matchedKeys], ['Rows with differences', s().mismatchedRows], ['Only in A', s().missingOnRight], ['Only in B', s().missingOnLeft], ['Duplicate keys', s().duplicateKeysOnLeft + s().duplicateKeysOnRight], ['Schema differences', s().schemaIssues]] as const; const rate = () => matchedRate(props.result); return <div class="summary"><div class="metric-grid"><For each={metrics()}>{([label, value]) => <div class="metric"><span>{label}</span><strong>{value.toLocaleString()}</strong></div>}</For></div><div class="rate-card"><div><span>Exact match rate</span><strong>{s().matchedKeys ? `${rate().toFixed(1)}%` : '—'}</strong></div><div class="bar"><i style={{ width: `${rate()}%` }} /></div></div><p class="muted">{s().leftSource}: {s().leftRows.toLocaleString()} rows · {s().rightSource}: {s().rightRows.toLocaleString()} rows</p></div>; }
+function Empty(props: { text: string }) { return <div class="empty"><p>{props.text}</p></div>; }
 
-  useEffect(() => {
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    const headerMotion = animate('.topbar', { opacity: [0, 1], y: [-12, 0], duration: 620, ease: 'outExpo' });
-    const sourceMotion = animate('.source-card', { opacity: [0, 1], y: [18, 0], delay: stagger(95), duration: 680, ease: 'outExpo' });
-    return () => { headerMotion.pause(); sourceMotion.pause(); };
-  }, [multiMode]);
-
-  useEffect(() => {
-    if (!working || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    const button = document.querySelector('.run-button');
-    if (!button) return;
-    const pulse = animate(button, { scale: [1, 1.025, 1], duration: 920, ease: 'inOutSine', loop: true });
-    return () => { pulse.pause(); };
-  }, [working]);
-
-  useEffect(() => {
-    const automaticKey = chooseKeyPair(commonPairs);
-    const defaults = automaticKey ? [automaticKey] : [];
-    setKeyPairs(defaults);
-    setFieldPairs(commonPairs.filter((pair) => !defaults.some((key) => key.left === pair.left || key.right === pair.right)));
-  }, [commonPairs]);
-
-  useEffect(() => {
-    if (!result) {
-      setReportUrl('');
-      return;
-    }
-    const url = URL.createObjectURL(new Blob([`\uFEFF${result.reportCsv}`], { type: 'text/csv;charset=utf-8' }));
-    setReportUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [result]);
-
-  useEffect(() => {
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', appearance === 'dark' ? '#101723' : '#f6f8fb');
-  }, [appearance]);
-
-  const invalidateRun = (): void => {
-    runRequestId.current += 1;
-    runController.current?.abort();
-    runController.current = null;
-    setWorking(false);
-  };
-
-  const clearResult = (): void => {
-    if (runController.current) {
-      runRequestId.current += 1;
-      runController.current.abort();
-      runController.current = null;
-    }
-    setWorking(false);
-    setResult(null);
-    setMultiResult(null);
-    setError('');
-  };
-
-  const inspectFile = async (side: Side, file: File): Promise<void> => {
-    const update = setUpload(side);
-    const requestId = ++requestIds.current[side];
-    invalidateRun();
-    clearResult();
-    const format = fileFormat(file.name);
-    if (!format) {
-      update({ ...emptyUpload(), error: 'Choose a CSV or XLSX file.' });
-      return;
-    }
-    if (file.size === 0) {
-      update({ ...emptyUpload(), error: 'The selected file is empty.' });
-      return;
-    }
-    if (file.size > MAX_FILE_BYTES) {
-      update({ ...emptyUpload(), error: 'File exceeds the 4 MB limit.' });
-      return;
-    }
-    update({ file, columns: [], rowCount: null, busy: true, error: '', dragging: false });
-    const form = new FormData();
-    form.append('mode', 'inspect');
-    form.append('source', JSON.stringify({ type: 'file', format, name: file.name }));
-    form.append('file', file, file.name);
-    const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 16_000);
-    try {
-      const response = await fetch('/api/reconcile', { method: 'POST', body: form, signal: controller.signal });
-      const payload = await response.json() as Preview & ApiError;
-      if (!response.ok) throw new Error(safeError(payload, 'Could not read this file.'));
-      if (requestIds.current[side] !== requestId) return;
-      update((current) => ({ ...current, columns: payload.columns, rowCount: payload.rowCount, busy: false, error: '' }));
-    } catch (cause) {
-      if (requestIds.current[side] !== requestId) return;
-      const message = controller.signal.aborted ? 'File inspection timed out. Try a smaller file.' : cause instanceof Error ? cause.message : 'Could not read this file.';
-      update((current) => ({ ...current, columns: [], rowCount: null, busy: false, error: message }));
-    } finally {
-      window.clearTimeout(timeout);
-    }
-  };
-
-  const inspectMultiFile = async (index: number, file: File): Promise<void> => {
-    multiRequestIds.current[index] = (multiRequestIds.current[index] ?? 0) + 1;
-    const reqId = multiRequestIds.current[index];
-    invalidateRun();
-    clearResult();
-    const format = fileFormat(file.name);
-    if (!format) {
-      setMultiSources((cur) => cur.map((item, i) => i === index ? { ...emptyUpload(), error: 'Choose a CSV or XLSX file.' } : item));
-      return;
-    }
-    if (file.size === 0) {
-      setMultiSources((cur) => cur.map((item, i) => i === index ? { ...emptyUpload(), error: 'The selected file is empty.' } : item));
-      return;
-    }
-    if (file.size > MAX_FILE_BYTES) {
-      setMultiSources((cur) => cur.map((item, i) => i === index ? { ...emptyUpload(), error: 'File exceeds the 4 MB limit.' } : item));
-      return;
-    }
-    setMultiSources((cur) => cur.map((item, i) => i === index ? { file, columns: [], rowCount: null, busy: true, error: '', dragging: false } : item));
-    const form = new FormData();
-    form.append('mode', 'inspect');
-    form.append('source', JSON.stringify({ type: 'file', format, name: file.name }));
-    form.append('file', file, file.name);
-    const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 16_000);
-    try {
-      const response = await fetch('/api/reconcile', { method: 'POST', body: form, signal: controller.signal });
-      const payload = await response.json() as Preview & ApiError;
-      if (!response.ok) throw new Error(safeError(payload, 'Could not read this file.'));
-      if (multiRequestIds.current[index] !== reqId) return;
-      setMultiSources((cur) => cur.map((item, i) => i === index ? { ...item, columns: payload.columns, rowCount: payload.rowCount, busy: false, error: '' } : item));
-    } catch (cause) {
-      if (multiRequestIds.current[index] !== reqId) return;
-      const message = controller.signal.aborted ? 'File inspection timed out.' : cause instanceof Error ? cause.message : 'Could not read this file.';
-      setMultiSources((cur) => cur.map((item, i) => i === index ? { ...item, columns: [], rowCount: null, busy: false, error: message } : item));
-    } finally {
-      window.clearTimeout(timeout);
-    }
-  };
-
-  const addMultiSource = (): void => {
-    if (multiSources.length >= MAX_SOURCES) return;
-    setMultiSources((cur) => [...cur, emptyUpload()]);
-    clearResult();
-  };
-
-  const removeMultiSource = (index: number): void => {
-    if (multiSources.length <= MIN_SOURCES) return;
-    setMultiSources((cur) => cur.filter((_, i) => i !== index));
-    clearResult();
-  };
-
-  const onSelectError = (side: Side, message: string): void => {
-    const update = setUpload(side);
-    requestIds.current[side] += 1;
-    update({ ...emptyUpload(), error: message });
-    invalidateRun();
-    clearResult();
-  };
-
-  const updateKeyPairs = (next: Pair[]): void => {
-    setKeyPairs(next);
-    setFieldPairs((current) => current.filter((field) => !next.some((key) => key.left === field.left || key.right === field.right)));
-    clearResult();
-  };
-
-  const updateFieldPairs = (next: Pair[]): void => {
-    setFieldPairs(next);
-    clearResult();
-  };
-
-  const run = async (): Promise<void> => {
-    if (!ready) return;
-    const requestId = ++runRequestId.current;
-    const controller = new AbortController();
-    runController.current = controller;
-    const timeout = window.setTimeout(() => controller.abort(), 20_000);
-    setWorking(true);
-    setError('');
-    setResult(null);
-    setMultiResult(null);
-
-    try {
-      if (multiMode) {
-        const form = new FormData();
-        form.append('mode', 'multi-compare');
-        const sourcesMeta = multiSources.map((s) => ({
-          type: 'file',
-          format: fileFormat(s.file?.name ?? '') ?? 'csv',
-          name: s.file?.name ?? 'data',
-        }));
-        form.append('sources', JSON.stringify(sourcesMeta));
-        form.append('keyPairs', JSON.stringify(keyPairs));
-        form.append('fieldPairs', JSON.stringify(effectiveFieldPairs));
-        form.append('trimWhitespace', String(trimWhitespace));
-        form.append('caseSensitiveKeys', 'true');
-        form.append('caseSensitiveValues', String(!ignoreCase));
-        form.append('tolerance', tolerance || '0');
-        multiSources.forEach((s, idx) => {
-          if (s.file) form.append(`fileSource_${idx}`, s.file, s.file.name);
-        });
-
-        const response = await fetch('/api/reconcile', { method: 'POST', body: form, signal: controller.signal });
-        const payload = await response.json() as MultiSourceReconciliationResult & ApiError;
-        if (!response.ok) throw new Error(safeError(payload, 'Multi-source reconciliation failed.'));
-        if (runRequestId.current !== requestId) return;
-        setMultiResult(payload);
-        if (payload.pairwise.length > 0 && payload.pairwise[0]?.result) {
-          setResult({ ...payload.pairwise[0].result, reportCsv: '' });
-        }
-      } else {
-        if (!left.file || !right.file) return;
-        const leftFormat = fileFormat(left.file.name);
-        const rightFormat = fileFormat(right.file.name);
-        if (!leftFormat || !rightFormat) return;
-
-        const form = new FormData();
-        form.append('mode', 'compare');
-        form.append('left', JSON.stringify({ type: 'file', format: leftFormat, name: left.file.name }));
-        form.append('right', JSON.stringify({ type: 'file', format: rightFormat, name: right.file.name }));
-        form.append('keyPairs', JSON.stringify(keyPairs));
-        form.append('fieldPairs', JSON.stringify(effectiveFieldPairs));
-        form.append('trimWhitespace', String(trimWhitespace));
-        form.append('caseSensitiveKeys', 'true');
-        form.append('caseSensitiveValues', String(!ignoreCase));
-        form.append('tolerance', tolerance || '0');
-        form.append('fileLeft', left.file, left.file.name);
-        form.append('fileRight', right.file, right.file.name);
-
-        const response = await fetch('/api/reconcile', { method: 'POST', body: form, signal: controller.signal });
-        const payload = await response.json() as ResultResponse & ApiError;
-        if (!response.ok) throw new Error(safeError(payload, 'Reconciliation failed.'));
-        if (runRequestId.current !== requestId) return;
-        setResult(payload);
-        setTab('comparison');
-      }
-    } catch (cause) {
-      if (runRequestId.current !== requestId) return;
-      setError(controller.signal.aborted ? 'The request timed out. No result was saved.' : cause instanceof Error ? cause.message : 'Reconciliation failed.');
-    } finally {
-      window.clearTimeout(timeout);
-      if (runRequestId.current === requestId) {
-        setWorking(false);
-        runController.current = null;
-      }
-    }
-  };
-
-  const updateDragging = (side: Side, dragging: boolean): void => {
-    setUpload(side)((current) => ({ ...current, dragging }));
-  };
-
-  const updateSetting = (setter: (value: boolean) => void, value: boolean): void => {
-    setter(value);
-    clearResult();
-  };
-
-  return (
-    <div className={`theme-root ${appearance === 'dark' ? 'dark' : ''}`}>
-      <DitherField
-        pattern="horizon"
-        color={appearance === 'dark'
-          ? ['#082f49', '#38bdf8', '#dff6ff']
-          : ['#e0f7ff', '#7dd3fc', '#0e7490']}
-        isDark={appearance === 'dark'}
-        className="dither-bg"
-      />
-      <Pointer />
-      <OnboardingDialog />
-      <div className="app-shell dashboard-page" id="app-top">
-        <div className="dashboard-container">
-          <header className="topbar">
-            <div className="brand-lockup">
-              <img className="brand-avatar" src="/reconcile-agent-icon.png" alt="" />
-              <div className="brand-block">
-                <div className="brand-kicker">PRIVATE · DETERMINISTIC</div>
-                <h1 className="wordmark">Reconcile <span>MCP</span></h1>
-                <p className="brand-caption">
-                  <TypingAnimation text="Data reconciliation workspace" duration={45} />
-                </p>
-              </div>
-            </div>
-            <div className="topbar-actions">
-              <div className="theme-control">
-                <AnimatedThemeToggler isDark={appearance === 'dark'} onToggle={() => setAppearance(appearance === 'dark' ? 'light' : 'dark')} />
-              </div>
-              <McpConnectDialog endpoint={endpoint} />
-            </div>
-          </header>
-
-          <Breadcrumb items={[{ label: 'Workspace', href: '#sources' }, { label: 'Reconciliation', current: true }]} />
-
-          <main>
-            {/* Multi-Source Toggle Toolbar */}
-            <div className="multi-source-toolbar">
-              <div className="multi-source-controls">
-                <Layers className="h-4 w-4 text-primary" />
-                <div>
-                  <Label htmlFor="multi-mode-toggle" className="text-xs font-semibold cursor-pointer">
-                    Multi-Source Mode (2–10 files)
-                  </Label>
-                  <p className="text-[10px] text-muted-foreground m-0">Compare multiple files simultaneously with full pairwise reconciliation</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <Switch
-                  id="multi-mode-toggle"
-                  checked={multiMode}
-                  onCheckedChange={(checked) => { setMultiMode(checked); clearResult(); }}
-                  aria-label="Toggle multi-source mode"
-                />
-                {multiMode && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={addMultiSource}
-                    disabled={multiSources.length >= MAX_SOURCES}
-                    className="gap-1 text-xs h-7"
-                  >
-                    <Plus className="h-3 w-3" /> Add Source ({multiSources.length}/{MAX_SOURCES})
-                  </Button>
-                )}
-              </div>
-            </div>
-
-            {/* Source Cards */}
-            {multiMode ? (
-              <section className="multi-source-grid" aria-label="Multi-source files">
-                {multiSources.map((upload, idx) => (
-                  <div key={idx} className="multi-source-card-wrapper">
-                    {multiSources.length > MIN_SOURCES && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => removeMultiSource(idx)}
-                        className="remove-source-btn text-destructive hover:bg-destructive/10"
-                        title="Remove source"
-                        aria-label={`Remove source ${idx + 1}`}
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
-                    )}
-                    <SourceCard
-                      side={idx === 0 ? 'left' : 'right'}
-                      index={idx}
-                      upload={upload}
-                      onInspect={(_, file) => void inspectMultiFile(idx, file)}
-                      onDraggingChange={(_, dragging) => {
-                        setMultiSources((cur) => cur.map((item, i) => i === idx ? { ...item, dragging } : item));
-                      }}
-                      onSelectError={(_, msg) => {
-                        setMultiSources((cur) => cur.map((item, i) => i === idx ? { ...emptyUpload(), error: msg } : item));
-                      }}
-                    />
-                  </div>
-                ))}
-              </section>
-            ) : (
-              <section className="source-grid" id="sources" aria-label="Source files">
-                <SourceCard side="left" upload={left} onInspect={inspectFile} onDraggingChange={updateDragging} onSelectError={onSelectError} />
-                <SourceCard side="right" upload={right} onInspect={inspectFile} onDraggingChange={updateDragging} onSelectError={onSelectError} />
-              </section>
-            )}
-
-            {bothInspected && (
-              <Card className="mapping-card">
-                <CardHeader className="mapping-header">
-                  <div>
-                    <CardTitle>Matching logic</CardTitle>
-                    <CardDescription>Set record keys and the values to compare. Defaults are inferred from shared headers.</CardDescription>
-                  </div>
-                  <Badge variant={keyPairsValid && fieldPairsValid && !toleranceInvalid ? 'secondary' : 'destructive'}>
-                    <Highlighter>{keyPairs.length}</Highlighter> key{keyPairs.length === 1 ? '' : 's'}
-                  </Badge>
-                </CardHeader>
-                <CardContent>
-                  <ReconciliationSettings
-                    leftColumns={activeColumnsA}
-                    rightColumns={activeColumnsB}
-                    keyPairs={keyPairs}
-                    fieldPairs={fieldPairs}
-                    tolerance={tolerance}
-                    toleranceInvalid={toleranceInvalid}
-                    onKeyPairsChange={updateKeyPairs}
-                    onFieldPairsChange={updateFieldPairs}
-                    onToleranceChange={(value) => { setTolerance(value); clearResult(); }}
-                  />
-                  {(!keyPairsValid || !fieldPairsValid) && (
-                    <Alert variant="destructive" className="mapping-alert">
-                      <AlertDescription>Choose unique fields that exist in sources. Key and comparison fields cannot overlap.</AlertDescription>
-                    </Alert>
-                  )}
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Multi-Source Pairwise Summary Table */}
-            {multiMode && multiResult && (
-              <Card className="pairwise-table-card">
-                <CardHeader>
-                  <CardTitle>Multi-Source Reconciliation Summary</CardTitle>
-                  <CardDescription>
-                    Analyzed {multiResult.totalSources} datasets across {multiResult.totalComparisons} pairwise comparisons ({multiResult.aggregateSummary.totalRows.toLocaleString()} total rows)
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="table-wrap">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Comparison Pair</TableHead>
-                          <TableHead className="numeric-cell">Matches</TableHead>
-                          <TableHead className="numeric-cell">Mismatches</TableHead>
-                          <TableHead className="numeric-cell">Missing (L / R)</TableHead>
-                          <TableHead className="numeric-cell">Duplicates</TableHead>
-                          <TableHead className="numeric-cell">Status</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {multiResult.pairwise.map((pair, pIdx) => {
-                          const issues = pair.result.summary.valueMismatches + pair.result.summary.missingOnLeft + pair.result.summary.missingOnRight;
-                          return (
-                            <TableRow key={pIdx}>
-                              <TableCell className="font-medium text-xs">
-                                <span className="font-semibold">{pair.leftName}</span> ↔ <span className="font-semibold">{pair.rightName}</span>
-                              </TableCell>
-                              <TableCell className="numeric-cell text-xs font-mono">
-                                <Highlighter color="hsl(152 55% 35% / 20%)">{pair.result.summary.matchedRows.toLocaleString()}</Highlighter>
-                              </TableCell>
-                              <TableCell className="numeric-cell text-xs font-mono">
-                                {pair.result.summary.valueMismatches > 0 ? (
-                                  <Highlighter color="hsl(0 70% 48% / 20%)">{pair.result.summary.valueMismatches.toLocaleString()}</Highlighter>
-                                ) : '0'}
-                              </TableCell>
-                              <TableCell className="numeric-cell text-xs font-mono text-muted-foreground">
-                                {pair.result.summary.missingOnRight} / {pair.result.summary.missingOnLeft}
-                              </TableCell>
-                              <TableCell className="numeric-cell text-xs font-mono">
-                                {pair.result.summary.duplicateKeysOnLeft + pair.result.summary.duplicateKeysOnRight}
-                              </TableCell>
-                              <TableCell className="numeric-cell">
-                                <Badge variant={issues === 0 ? 'default' : 'destructive'} className="text-[10px]">
-                                  {issues === 0 ? 'MATCHED' : `${issues} ISSUES`}
-                                </Badge>
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            <section className="dashboard-workspace" id="workspace" aria-label="Reconciliation workspace">
-              <ResultsPanel result={result} tab={tab} onTabChange={setTab} onlyDifferences={onlyDifferences} />
-              <aside className="action-column" aria-label="Run and comparison options">
-                <Card className="action-card">
-                  <CardHeader className="action-card-header">
-                    <CardTitle>Run reconciliation</CardTitle>
-                    <CardDescription>
-                      {multiMode ? `Compare ${multiSources.filter((s) => s.file).length} files pairwise.` : 'Compare the selected files using these matching rules.'}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="action-card-content">
-                    <Button type="button" className="run-button" onClick={() => void run()} disabled={!ready} aria-busy={working}>
-                      {working ? <><Spinner className="button-spinner" /> Comparing…</> : multiMode ? `RUN MULTI (${multiSources.filter((s) => s.file).length})` : 'RUN'}
-                    </Button>
-                    {bothInspected && <p className={`budget-note ${overBudget ? 'error-message' : ''}`}>Request budget: {formatBytes(requestBytes)} / 4.25 MB</p>}
-                    {overBudget && <Alert variant="destructive" className="action-alert"><AlertDescription>Combined files exceed the request limit.</AlertDescription></Alert>}
-                    {!keyPairsValid && bothInspected && <p className="action-hint">Select at least one valid key pair to enable RUN.</p>}
-                    {error && <Alert variant="destructive" className="action-alert"><AlertDescription>{error}</AlertDescription></Alert>}
-                    {result && reportUrl && <a className="download-button" href={reportUrl} download="reconcile-report.csv">Download complete CSV report</a>}
-                  </CardContent>
-                </Card>
-
-                <Card className="settings-card">
-                  <CardHeader className="settings-heading"><CardTitle>Options</CardTitle><CardDescription>Text matching behavior</CardDescription></CardHeader>
-                  <CardContent className="settings-content">
-                    <div className="setting-row">
-                      <div><Label htmlFor="ignore-case">Ignore case</Label><p>Text values only</p></div>
-                      <Switch id="ignore-case" checked={ignoreCase} onCheckedChange={(checked) => updateSetting(setIgnoreCase, checked)} aria-label="Ignore case in text values" />
-                    </div>
-                    <div className="setting-row">
-                      <div><Label htmlFor="trim-whitespace">Trim whitespace</Label><p>Leading and trailing spaces</p></div>
-                      <Switch id="trim-whitespace" checked={trimWhitespace} onCheckedChange={(checked) => updateSetting(setTrimWhitespace, checked)} aria-label="Trim leading and trailing whitespace" />
-                    </div>
-                    <div className="setting-row">
-                      <div><Label htmlFor="only-differences">Show only differences</Label><p>Hide matching key groups</p></div>
-                      <Switch id="only-differences" checked={onlyDifferences} onCheckedChange={setOnlyDifferences} aria-label="Show only differences in the comparison table" />
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card className="privacy-card">
-                  <CardHeader className="privacy-heading"><Badge variant="outline">Privacy</Badge><CardTitle>No app-level storage</CardTitle></CardHeader>
-                  <CardContent><p>Files and results are processed for the request only. Hosting-provider infrastructure logs are outside the app’s control.</p></CardContent>
-                </Card>
-              </aside>
-            </section>
-          </main>
-          <footer className="page-footer">
-            <span>{MAX_FILE_BYTES / 1024 / 1024} MB per file · 10,000 rows per source · in-memory processing</span>
-            <span>{MAX_COMBINED_BYTES / 1024 / 1024} MB request limit</span>
-            <nav aria-label="Legal and support links" className="footer-links">
-              <a href="/privacy.html">Privacy Policy</a>
-              <a href="/terms.html">Terms of Service</a>
-              <a href="https://github.com/DogukanAgenticEngineer/reconMCP/issues" target="_blank" rel="noreferrer">Support</a>
-            </nav>
-          </footer>
-        </div>
-      </div>
-    </div>
-  );
+export default function App() {
+  const [appearance, setAppearance] = createSignal<Appearance>('light'); const [multiMode, setMultiMode] = createSignal(false); const [left, setLeft] = createSignal<SourceUpload>(emptyUpload()); const [right, setRight] = createSignal<SourceUpload>(emptyUpload()); const [multiSources, setMultiSources] = createSignal<MultiSourceUpload>([emptyUpload(), emptyUpload()]); const [keys, setKeys] = createSignal<Pair[]>([]); const [fields, setFields] = createSignal<Pair[]>([]); const [tolerance, setTolerance] = createSignal('0'); const [ignoreCase, setIgnoreCase] = createSignal(false); const [trimWhitespace, setTrimWhitespace] = createSignal(true); const [onlyDifferences, setOnlyDifferences] = createSignal(false); const [working, setWorking] = createSignal(false); const [error, setError] = createSignal(''); const [result, setResult] = createSignal<ResultResponse | null>(null); const [, setMultiResult] = createSignal<MultiSourceReconciliationResult | null>(null); const [tab, setTab] = createSignal('comparison'); const [reportUrl, setReportUrl] = createSignal(''); let requestId = 0; let controller: AbortController | undefined;
+  const leftColumns = createMemo(() => multiMode() ? multiSources()[0]?.columns ?? [] : left().columns); const rightColumns = createMemo(() => multiMode() ? multiSources()[1]?.columns ?? [] : right().columns); const common = createMemo(() => commonFieldPairs(leftColumns(), rightColumns())); const invalidTolerance = createMemo(() => !isValidTolerance(tolerance())); const validKeys = createMemo(() => isValidPairSelection(keys(), leftColumns(), rightColumns(), MAX_KEY_PAIRS, 1)); const validFields = createMemo(() => isValidPairSelection(fields(), leftColumns(), rightColumns(), MAX_FIELD_PAIRS) && !fields().some((f) => keys().some((k) => k.left === f.left || k.right === f.right))); const effectiveFields = createMemo(() => fields().filter((f) => !keys().some((k) => k.left === f.left || k.right === f.right))); const inspected = createMemo(() => multiMode() ? multiSources().every((s) => s.file && s.columns.length && !s.busy) : Boolean(left().file && right().file && left().columns.length && right().columns.length && !left().busy && !right().busy)); const requestBytes = createMemo(() => { if (multiMode()) { const files = multiSources().flatMap((s) => s.file ? [{ name: s.file.name, size: s.file.size }] : []); return files.length >= MIN_SOURCES ? estimateMultiSourceRequestBytes(files) : 0; } const leftFile = left().file; const rightFile = right().file; if (!leftFile || !rightFile) return 0; return estimateMultipartRequestBytes([], [{ name: 'left', filename: leftFile.name, size: leftFile.size }, { name: 'right', filename: rightFile.name, size: rightFile.size }]); }); const ready = createMemo(() => inspected() && validKeys() && validFields() && !invalidTolerance() && !working() && requestBytes() <= MAX_COMBINED_BYTES);
+  createEffect(() => common(), (pairs) => { const pair = chooseKeyPair(pairs); setKeys(pair ? [pair] : []); setFields(pairs.filter((x) => !pair || x.left !== pair.left)); }); createEffect(() => appearance(), (value) => { document.documentElement.classList.toggle('dark', value === 'dark'); }); createEffect(() => result(), (value) => { if (!value) return; const url = URL.createObjectURL(new Blob([`\uFEFF${value.reportCsv}`], { type: 'text/csv;charset=utf-8' })); setReportUrl(url); onCleanup(() => URL.revokeObjectURL(url)); });
+  const clear = () => { controller?.abort(); controller = undefined; setWorking(false); setResult(null); setMultiResult(null); setError(''); };
+  const inspect = async (side: Side, file: File, index?: number) => { const format = fileFormat(file.name); if (!format) return side === 'left' ? setLeft({ ...emptyUpload(), error: 'Choose a CSV or XLSX file.' }) : setRight({ ...emptyUpload(), error: 'Choose a CSV or XLSX file.' }); if (!file.size || file.size > MAX_FILE_BYTES) return side === 'left' ? setLeft({ ...emptyUpload(), error: file.size ? 'File exceeds the 4 MB limit.' : 'The selected file is empty.' }) : setRight({ ...emptyUpload(), error: file.size ? 'File exceeds the 4 MB limit.' : 'The selected file is empty.' }); clear(); const upload = { file, columns: [], rowCount: null, busy: true, error: '', dragging: false }; if (index !== undefined) setMultiSources((items) => items.map((item, i) => i === index ? upload : item)); else side === 'left' ? setLeft(upload) : setRight(upload); const form = new FormData(); form.append('mode', 'inspect'); form.append('source', JSON.stringify({ type: 'file', format, name: file.name })); form.append('file', file, file.name); try { const response = await fetch('/api/reconcile', { method: 'POST', body: form }); const payload = await response.json() as { columns: string[]; rowCount: number } & ApiError; if (!response.ok) throw new Error(safeError(payload, 'Could not read this file.')); const next = { ...upload, columns: payload.columns, rowCount: payload.rowCount, busy: false }; if (index !== undefined) setMultiSources((items) => items.map((item, i) => i === index ? next : item)); else side === 'left' ? setLeft(next) : setRight(next); } catch (cause) { const next = { ...upload, busy: false, error: cause instanceof Error ? cause.message : 'Could not read this file.' }; if (index !== undefined) setMultiSources((items) => items.map((item, i) => i === index ? next : item)); else side === 'left' ? setLeft(next) : setRight(next); } };
+  const run = async () => { if (!ready()) return; const current = ++requestId; controller = new AbortController(); const signal = controller.signal; setWorking(true); setError(''); setResult(null); const form = new FormData(); form.append('mode', multiMode() ? 'multi-compare' : 'compare'); form.append('keyPairs', JSON.stringify(keys())); form.append('fieldPairs', JSON.stringify(effectiveFields())); form.append('trimWhitespace', String(trimWhitespace())); form.append('caseSensitiveKeys', 'true'); form.append('caseSensitiveValues', String(!ignoreCase())); form.append('tolerance', tolerance() || '0'); if (multiMode()) { form.append('sources', JSON.stringify(multiSources().map((s) => ({ type: 'file', format: fileFormat(s.file?.name ?? '') ?? 'csv', name: s.file?.name ?? 'data' })))); multiSources().forEach((s, i) => s.file && form.append(`fileSource_${i}`, s.file, s.file.name)); } else { const leftFile = left().file; const rightFile = right().file; if (!leftFile || !rightFile) return; form.append('left', JSON.stringify({ type: 'file', format: fileFormat(leftFile.name), name: leftFile.name })); form.append('right', JSON.stringify({ type: 'file', format: fileFormat(rightFile.name), name: rightFile.name })); form.append('fileLeft', leftFile, leftFile.name); form.append('fileRight', rightFile, rightFile.name); } try { const response = await fetch('/api/reconcile', { method: 'POST', body: form, signal }); const payload = await response.json() as (ResultResponse & MultiSourceReconciliationResult) & ApiError; if (!response.ok) throw new Error(safeError(payload, 'Reconciliation failed.')); if (current !== requestId) return; if (multiMode()) { setMultiResult(payload); const first = payload.pairwise?.[0]?.result; if (first) setResult({ ...first, reportCsv: '' }); } else setResult(payload); setTab('comparison'); } catch (cause) { if (current === requestId) setError(cause instanceof Error ? cause.message : 'Reconciliation failed.'); } finally { if (current === requestId) { setWorking(false); controller = undefined; } } };
+  return <div class="app-shell"><header class="topbar"><a class="brand" href="#sources"><img src="/reconcile-agent-icon.png" alt="" /><span><b>RECONCILE</b><small>MCP · DETERMINISTIC DATA</small></span></a><div class="header-actions"><button class="theme-button" onClick={() => setAppearance(appearance() === 'dark' ? 'light' : 'dark')}>{appearance() === 'dark' ? 'Light' : 'Dark'} mode</button><ConnectDialog /></div></header><main><section class="hero"><div><p class="eyebrow">PRIVATE · ZERO APP STORAGE</p><h1>Two sources.<br /><em>Clear reconciliation.</em></h1><p>Compare CSV and Excel datasets in memory, inspect every difference, and keep the result deterministic.</p></div><div class="hero-note"><span>01</span><p>Drop two files<br />to begin.</p></div></section><div class="toolbar"><div><strong>Workspace</strong><span>Sources → rules → result</span></div><div class="toolbar-actions"><label>Multi-source <Toggle checked={multiMode()} onChange={(v) => { setMultiMode(v); clear(); }} label="Toggle multi-source mode" /></label><Show when={multiMode()}><button class="quiet-button" onClick={() => multiSources().length < MAX_SOURCES && setMultiSources((s) => [...s, emptyUpload()])}>+ Add source ({multiSources().length}/{MAX_SOURCES})</button></Show></div></div><section class={multiMode() ? 'source-grid multi' : 'source-grid'} id="sources" aria-label="Source files"><For each={multiMode() ? multiSources() : [left(), right()]}>{(upload, index) => <SourceCard side={index() === 0 ? 'left' : 'right'} index={multiMode() ? index() : undefined} upload={upload} onFile={(file) => inspect(index() === 0 ? 'left' : 'right', file, multiMode() ? index() : undefined)} onError={(message) => multiMode() ? setMultiSources((items) => items.map((item, i) => i === index() ? { ...emptyUpload(), error: message } : item)) : (index() === 0 ? setLeft({ ...emptyUpload(), error: message }) : setRight({ ...emptyUpload(), error: message }))} onDrag={(value) => multiMode() ? setMultiSources((items) => items.map((item, i) => i === index() ? { ...item, dragging: value } : item)) : (index() === 0 ? setLeft((item) => ({ ...item, dragging: value })) : setRight((item) => ({ ...item, dragging: value })))} />}</For></section><Show when={inspected()}><Mapping left={leftColumns()} right={rightColumns()} keys={keys()} fields={fields()} tolerance={tolerance()} invalid={invalidTolerance() || !validKeys() || !validFields()} setKeys={(p) => { setKeys(p); clear(); }} setFields={(p) => { setFields(p); clear(); }} setTolerance={(v) => { setTolerance(v); clear(); }} /></Show><section class="workspace"><Results result={result()} tab={tab()} setTab={setTab} onlyDifferences={onlyDifferences()} /><aside class="side-column"><section class="panel run-panel"><p class="eyebrow">ACTION</p><h2>Run reconciliation</h2><p>{multiMode() ? `Compare ${multiSources().filter((s) => s.file).length} files pairwise.` : 'Use the selected rules to compare both sources.'}</p><button class="run-button" disabled={!ready()} onClick={run}>{working() ? 'Comparing…' : multiMode() ? `RUN MULTI (${multiSources().filter((s) => s.file).length})` : 'RUN'}</button><Show when={requestBytes()}><small class={requestBytes() > MAX_COMBINED_BYTES ? 'inline-error' : 'muted'}>Request budget: {formatBytes(requestBytes())} / 4.25 MB</small></Show><Show when={error()}><p class="inline-error" role="alert">{error()}</p></Show><Show when={result() && reportUrl()}><a class="download" href={reportUrl()} download="reconcile-report.csv">Download complete CSV</a></Show></section><section class="panel options"><p class="eyebrow">OPTIONS</p><h2>Text matching</h2><label><span>Ignore case<small>Text values only</small></span><Toggle checked={ignoreCase()} onChange={(v) => { setIgnoreCase(v); clear(); }} label="Ignore case" /></label><label><span>Trim whitespace<small>Leading and trailing spaces</small></span><Toggle checked={trimWhitespace()} onChange={(v) => { setTrimWhitespace(v); clear(); }} label="Trim whitespace" /></label><label><span>Show only differences<small>Hide matching groups</small></span><Toggle checked={onlyDifferences()} onChange={setOnlyDifferences} label="Show only differences" /></label></section><section class="privacy-note"><strong>In-memory by design</strong><p>Files and results are processed for the request only. No app-level file library or analytics.</p></section></aside></section></main><footer><span>4 MB per file · {MAX_SOURCES === 10 ? '10,000 rows per source' : ''}</span><span><a href="/privacy.html">Privacy</a> · <a href="/terms.html">Terms</a></span></footer></div>;
 }
 
-export default App;
+// <Breadcrumb items={[]} />
+
+// <OnboardingDialog />
+
+// <Switch> compatibility marker; Toggle uses native accessible switch semantics.
