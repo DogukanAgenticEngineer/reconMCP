@@ -1,5 +1,8 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
+import { generateProbablePrime, verifyPrimeDecimal } from '../crypto/primality.js';
+import { verifyPrimeUnderGrh } from '../crypto/grh-primality.js';
+import { generateLeanPrimeCertificateSource } from '../crypto/lean-certificate.js';
 import { assertResponseSize, compareDatasets, compareMultipleDatasets, COMPARISON_PREVIEW_LIMIT } from '../core/compare.js';
 import { resultToCsv } from '../core/report.js';
 import type { CompareOptions, ReconciliationResult } from '../core/types.js';
@@ -35,6 +38,10 @@ External connections are subject to deployment network policy. Do not place cred
 | \`detect_value_mismatches\` | Show deterministic mapped-value differences |
 | \`generate_report\` | Return structured findings, Markdown and complete CSV text |
 | estimate_operation_carbon | Model a planned call from expected server execution time |
+| `verify_prime` | Verify an integer; deterministic below 2^64, probable-prime screening above |
+| `generate_probable_prime` | Generate a CSPRNG-backed probable-prime candidate (128–4096 bits) |
+| `verify_prime_grh` | Conditional Miller–Rabin scan under GRH |
+| `generate_lean_prime_certificate` | Generate a Lean 4 + Mathlib proof script |
 
 ## Matching
 
@@ -59,6 +66,14 @@ The machine-readable structuredContent object uses the schema reconcile.result.v
 \`\`\`
 
 Tool results include a client-readable Markdown report and machine-readable structured content. Client rendering varies; the structured fields are the canonical data. Full CSV output is available from \`generate_report\` when it fits within the 2 MB response limit. No result is silently truncated to fit that limit.
+
+## Cryptographic primality
+
+The `verify_prime` tool uses a proven deterministic Miller–Rabin base set only for integers below 2^64. Larger inputs are screened with cryptographically random bases and are reported as `probable_prime`, not proven prime. `generate_probable_prime` produces candidates using the operating-system CSPRNG and Miller–Rabin screening.
+
+`verify_prime_grh` scans every integer base up to a conservative integer upper bound for Bach's GRH-conditional (2(\ln n)^2) bound. A positive result is conditional on GRH for Dirichlet L-functions; a Miller–Rabin witness or non-trivial gcd proves compositeness unconditionally. The tool returns `inconclusive` if the configured base budget is exceeded.
+
+`generate_lean_prime_certificate` generates a concrete `Nat.Prime n` theorem script using Lean 4 + Mathlib. The service does not execute Lean and reports `generated_not_checked`; only a successful local `lake env lean PrimeCertificate.lean` run confirms kernel checking. This is not a compact Pocklington/ECPP certificate or an RSA key-generation pipeline.
 
 ## Carbon estimate
 
@@ -377,6 +392,73 @@ export function createMcpServer(): McpServer {
     } catch (error) {
       return failed(error, estimateCarbon(performance.now() - startedAt, 'completed', 'compare_multiple_datasets'));
     }
+  });
+
+
+  server.registerTool('verify_prime', {
+    title: 'Verify integer primality',
+    description: 'Deterministic Miller-Rabin below 2^64; randomized probable-prime screening above that bound. No RH/GRH proof claim.',
+    inputSchema: {
+      n: z.string().regex(/^(?:0|[1-9][0-9]{0,1233})$/),
+      rounds: z.number().int().min(1).max(64).optional(),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+  }, async ({ n, rounds }) => {
+    const result = verifyPrimeDecimal(n, rounds ?? 32);
+    const markdown = '# Prime verification\n\nVerdict: ' + result.verdict + '\nAssurance: ' + result.assurance + '\nMethod: ' + result.method + '\nRounds: ' + result.rounds + '\n\n' + result.caveat;
+    return response(markdown, { schemaVersion: 'reconcile.primality.v1', ...result });
+  });
+
+  server.registerTool('generate_probable_prime', {
+    title: 'Generate probable prime candidate',
+    description: 'Generate a CSPRNG-backed odd probable-prime candidate. Not a certified RSA key-generation implementation.',
+    inputSchema: {
+      bits: z.number().int().min(128).max(4096),
+      rounds: z.number().int().min(16).max(64).optional(),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+  }, async ({ bits, rounds }) => {
+    const result = generateProbablePrime(bits, rounds ?? 32);
+    const markdown = '# Probable-prime candidate generated\n\nBit length: ' + result.bits + '\nCandidates tested: ' + result.candidatesTested + '\nMiller-Rabin rounds: ' + result.rounds + '\n\n' + result.caveat;
+    return response(markdown, { schemaVersion: 'reconcile.primality.v1', ...result });
+  });
+
+
+  server.registerTool('verify_prime_grh', {
+    title: 'Verify primality conditionally under GRH',
+    description: 'Scan every integer Miller-Rabin base up to the conservative Bach bound derived from bit length. A positive result is conditional on GRH for Dirichlet L-functions. A budget-exceeded result is inconclusive. Composite witnesses remain unconditional.',
+    inputSchema: {
+      n: z.string().regex(/^(?:0|[1-9][0-9]{0,1233})$/),
+      maxBaseChecks: z.number().int().min(1).max(1_000_000).optional(),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+  }, async ({ n, maxBaseChecks }) => {
+    const result = verifyPrimeUnderGrh(n, maxBaseChecks ?? 100_000);
+    const markdown = '# GRH-conditional primality scan\n\nVerdict: ' + result.verdict
+      + '\nAssurance: ' + result.assurance
+      + '\nAssumption: ' + result.assumption
+      + '\nBach base bound: ' + result.theoreticalBaseBound
+      + '\nScanned through: ' + result.effectiveBaseBound
+      + '\nBases checked: ' + result.basesChecked
+      + '\n\n' + result.caveat;
+    return response(markdown, { schemaVersion: 'reconcile.primality.grh.v1', ...result });
+  });
+
+  server.registerTool('generate_lean_prime_certificate', {
+    title: 'Generate Lean 4 primality proof script',
+    description: 'Generate a concrete Lean 4 + Mathlib theorem script for Nat.Prime n. The returned script has not been compiled or kernel-checked by this service.',
+    inputSchema: {
+      n: z.string().regex(/^(?:0|[1-9][0-9]{0,299})$/).describe('Positive decimal integer with at most 300 digits.'),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+  }, async ({ n }) => {
+    const result = generateLeanPrimeCertificateSource(n);
+    const markdown = '# Lean 4 proof script generated\n\nVerification status: ' + result.verificationStatus
+      + '\nDependency: ' + result.dependency
+      + '\n\n' + result.instructions
+      + '\n\n' + result.caveat
+      + '\n\n```lean\n' + result.source + '```';
+    return response(markdown, { schemaVersion: 'reconcile.primality.lean.v1', ...result });
   });
 
   return server;

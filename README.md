@@ -16,10 +16,19 @@ Reconcile MCP, iki CSV/Excel (XLSX), salt okunur PostgreSQL veya REST kaynağın
 - `CONNECT MCP` endpoint, taşıma biçimi ve araç listesini erişilebilir bağlantı penceresinde gösterir; o ortama ait `/api/mcp` URL'sini kopyalar, dış istemciye zaten bağlı olduğunu iddia etmez. `RUN` karşılaştırmayı başlatır; CSV indirme bağlantısı tüm fark kategorilerini içerir. Sonuç panelinde anahtar/alan/değer araması ve durum filtresi vardır.
 - Dashboard'ın karşılaştırma önizlemesi en fazla 50 anahtar grubunu gösterir; arama, durum filtresi, sütun sıralama ve sayfalama içerir. Fark gruplarını önceleyen `Show only differences` filtresi korunur. Ayrıntı ve önizleme sınırları açıkça yazılır; indirilen CSV tam fark raporudur.
 - CSV ve XLSX (ilk çalışma sayfası) bellekten ayrıştırma; PostgreSQL'de quoted identifier ve parametreli LIMIT ile yalnız `SELECT`/read-only transaction; REST'te yalnız HTTPS GET.
-- `compare_datasets`, `find_missing_records`, `detect_duplicates`, `detect_value_mismatches` ve `generate_report` araçları; stateless Streamable HTTP (`/api/mcp`) ile yerel STDIO. Her karşılaştırma sonucu, sunucu işlem süresi ve açıklanmış güç/şebeke katsayılarıyla modellenen karbon tahmini taşır; `estimate_operation_carbon` aracı çalıştırma öncesi tahmin verir. Bu değer sayaç ölçümü veya sağlayıcı faturası değildir; harici REST/PostgreSQL, ağ, istemci, veri merkezi ek yükü/PUE ve gömülü donanım emisyonlarını kapsamaz. Statik `reconcile://guide` MCP kaynağı ve `reconcile_workflow` prompt'u istemci keşfine açılır.
+- `compare_datasets`, `find_missing_records`, `detect_duplicates`, `detect_value_mismatches`, `generate_report` ve kriptografik asal sayı araçları `verify_prime` / `generate_probable_prime`; stateless Streamable HTTP (`/api/mcp`) ile yerel STDIO. Her karşılaştırma sonucu, sunucu işlem süresi ve açıklanmış güç/şebeke katsayılarıyla modellenen karbon tahmini taşır; `estimate_operation_carbon` aracı çalıştırma öncesi tahmin verir. Bu değer sayaç ölçümü veya sağlayıcı faturası değildir; harici REST/PostgreSQL, ağ, istemci, veri merkezi ek yükü/PUE ve gömülü donanım emisyonlarını kapsamaz. Statik `reconcile://guide` MCP kaynağı ve `reconcile_workflow` prompt'u istemci keşfine açılır.
 - MCP yanıtlarında başlıklı, metrik tablolu ve sınırlandırılmış fark tablolu Markdown ile aynı bulguların makinece okunabilir `structuredContent` sunumu birlikte döner. İstemcinin nihai görünümü değişebilir; yapılandırılmış alanlar kanonik kalır. Karşılaştırma saf TypeScript'tir; AI kullanmaz.
 - Bağlantı penceresi MCP sonucunun biçimini `Outcome → Metrics → Differences → Structured data` akışıyla açıklar; Claude/ChatGPT'nin son sunumu yine MCP istemcisinin özelliklerine bağlıdır.
 - Kobalte (Radix ve Base UI primitives), TanStack Table, SolidJS 2, Vite, Tailwind 3, TypeScript strict, Zod, Vitest ve ESLint.
+
+## Kriptografik asal sayı araçları
+
+- `verify_prime`: 64 bit altı için kanıtlanmış deterministik Miller–Rabin taban kümesi; daha büyük sayılarda CSPRNG tabanlı olasılıksal tarama.
+- `generate_probable_prime`: 128–4096 bit aralığında CSPRNG ile aday üretimi.
+- `verify_prime_grh`: Bach'ın GRH koşullu (2(\ln n)^2) taban sınırına kadar tüm tamsayı tabanları tarar. Pozitif sonuç yalnızca Dirichlet L-fonksiyonları için GRH varsayımı altında geçerlidir. İş bütçesi yetmezse `inconclusive` döner. Bulunan bileşik tanığı koşulsuzdur.
+- `generate_lean_prime_certificate`: Somut `Nat.Prime n` önermesi için Lean 4 + Mathlib ispat betiği üretir. Servis Lean çalıştırmaz; durum özellikle `generated_not_checked` olarak işaretlenir. Kullanıcı betiği `lake env lean PrimeCertificate.lean` ile kernel kontrolünden geçirmelidir.
+
+Bu araçlar henüz kompakt Pocklington/ECPP sertifikası, uzaktan Lean kernel servisi veya üretim RSA anahtar üretim hattı sağlamaz. GRH modu koşulsuz kanıt değildir. Büyük sayılar için Bach sınırı çok sayıda taban gerektirebilir; varsayılan 100.000 taban bütçesini aşan çağrılar sonuç uydurmak yerine `inconclusive` döndürür.
 
 ## Sınırlar
 
