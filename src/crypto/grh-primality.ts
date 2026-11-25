@@ -75,14 +75,14 @@ export function verifyPrimeUnderGrh(value: string, maxBaseChecks = 100_000): Grh
   });
 
   if (n < 2n) return baseResult('composite', 'unconditional', 'none', 0n, 0n, 0, 'Values below 2 are not prime.');
-  if (n === 2n) return baseResult('prime', 'conditional_grh', 'GRH_for_Dirichlet_L_functions', 0n, 0n, 0, '2 is prime by direct exact check; no GRH assumption is needed.');
-  if ((n & 1n) === 0n) return baseResult('composite', 'unconditional_witness', 'none', 0n, 0n, 0, 'An even integer greater than 2 is composite.');
+  if (n === 2n) return baseResult('prime', 'unconditional', 'none', 0n, 0n, 0, '2 is prime by direct exact check; no GRH assumption is needed.');
+  if ((n & 1n) === 0n) return baseResult('composite', 'unconditional', 'none', 0n, 0n, 0, 'An even integer greater than 2 is composite.');
 
   const small = verifyPrimeDecimal(value);
   if (small.assurance === 'deterministic_u64') {
     return baseResult(
       small.verdict === 'prime' ? 'prime' : 'composite',
-      small.verdict === 'prime' ? 'unconditional_witness' : 'unconditional_witness',
+      'unconditional',
       'none', 0n, 0n, 0,
       'Handled by the separate proven deterministic 64-bit path; no GRH assumption is used.',
     );
@@ -104,11 +104,11 @@ export function verifyPrimeUnderGrh(value: string, maxBaseChecks = 100_000): Grh
     checked += 1;
     const divisor = gcd(a, n);
     if (divisor > 1n && divisor < n) {
-      return baseResult('composite', 'unconditional_witness', 'none', theoreticalBound, effectiveBound, checked,
+      return baseResult('composite', 'unconditional', 'none', theoreticalBound, effectiveBound, checked,
         'A non-trivial gcd is an unconditional compositeness witness.');
     }
     if (divisor === 1n && !isStrongProbablePrime(n, a)) {
-      return baseResult('composite', 'unconditional_witness', 'none', theoreticalBound, effectiveBound, checked,
+      return baseResult('composite', 'unconditional', 'none', theoreticalBound, effectiveBound, checked,
         'A Miller-Rabin strong witness proves compositeness without any RH/GRH assumption.');
     }
   }
@@ -116,7 +116,7 @@ export function verifyPrimeUnderGrh(value: string, maxBaseChecks = 100_000): Grh
   const exhaustive = effectiveBound === n - 2n;
   return baseResult(
     exhaustive ? 'prime' : 'conditional_prime',
-    exhaustive ? 'unconditional_witness' : 'conditional_grh',
+    exhaustive ? 'unconditional' : 'conditional_grh',
     exhaustive ? 'none' : 'GRH_for_Dirichlet_L_functions',
     theoreticalBound, effectiveBound, checked,
     exhaustive
