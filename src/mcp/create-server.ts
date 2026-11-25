@@ -1,6 +1,8 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { generateProbablePrime, verifyPrimeDecimal } from '../crypto/primality.js';
+import { verifyPrimeUnderGrh } from '../crypto/grh-primality.js';
+import { generateLeanPrimeCertificateSource } from '../crypto/lean-certificate.js';
 import { assertResponseSize, compareDatasets, compareMultipleDatasets, COMPARISON_PREVIEW_LIMIT } from '../core/compare.js';
 import { resultToCsv } from '../core/report.js';
 import type { CompareOptions, ReconciliationResult } from '../core/types.js';
@@ -407,6 +409,44 @@ export function createMcpServer(): McpServer {
     const result = generateProbablePrime(bits, rounds ?? 32);
     const markdown = '# Probable-prime candidate generated\\n\\nBit length: ' + result.bits + '\\nCandidates tested: ' + result.candidatesTested + '\\nMiller-Rabin rounds: ' + result.rounds + '\\n\\n' + result.caveat;
     return response(markdown, { schemaVersion: 'reconcile.primality.v1', ...result });
+  });
+
+
+  server.registerTool('verify_prime_grh', {
+    title: 'Verify primality conditionally under GRH',
+    description: 'Scan every integer Miller-Rabin base up to the conservative Bach bound derived from bit length. A positive result is conditional on GRH for Dirichlet L-functions. A budget-exceeded result is inconclusive. Composite witnesses remain unconditional.',
+    inputSchema: {
+      n: z.string().regex(/^(?:0|[1-9][0-9]{0,1233})$/),
+      maxBaseChecks: z.number().int().min(1).max(1_000_000).optional(),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+  }, async ({ n, maxBaseChecks }) => {
+    const result = verifyPrimeUnderGrh(n, maxBaseChecks ?? 100_000);
+    const markdown = '# GRH-conditional primality scan\\n\\nVerdict: ' + result.verdict
+      + '\\nAssurance: ' + result.assurance
+      + '\\nAssumption: ' + result.assumption
+      + '\\nBach base bound: ' + result.theoreticalBaseBound
+      + '\\nScanned through: ' + result.effectiveBaseBound
+      + '\\nBases checked: ' + result.basesChecked
+      + '\\n\\n' + result.caveat;
+    return response(markdown, { schemaVersion: 'reconcile.primality.grh.v1', ...result });
+  });
+
+  server.registerTool('generate_lean_prime_certificate', {
+    title: 'Generate Lean 4 primality proof script',
+    description: 'Generate a concrete Lean 4 + Mathlib theorem script for Nat.Prime n. The returned script has not been compiled or kernel-checked by this service.',
+    inputSchema: {
+      n: z.string().regex(/^(?:0|[1-9][0-9]{0,299})$/).describe('Positive decimal integer with at most 300 digits.'),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+  }, async ({ n }) => {
+    const result = generateLeanPrimeCertificateSource(n);
+    const markdown = '# Lean 4 proof script generated\\n\\nVerification status: ' + result.verificationStatus
+      + '\\nDependency: ' + result.dependency
+      + '\\n\\n' + result.instructions
+      + '\\n\\n' + result.caveat
+      + '\\n\\n```lean\\n' + result.source + '```';
+    return response(markdown, { schemaVersion: 'reconcile.primality.lean.v1', ...result });
   });
 
   return server;
