@@ -19,7 +19,7 @@ describe('GRH-conditional primality verification', () => {
   });
 
   it('returns inconclusive when the full base interval exceeds budget', () => {
-    const n = ((1n << 511n) + 1n).toString();
+    const n = '6703903964971298549787012499102923063739682910296196688861780721860882015036773488400937149083451713845015929093243025426876941405973284973216824503042159';
     const result = verifyPrimeUnderGrh(n, 100);
     expect(result.verdict).toBe('inconclusive');
     expect(result.assurance).toBe('not_verified');
