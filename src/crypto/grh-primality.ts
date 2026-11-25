@@ -46,7 +46,7 @@ function bachBoundFromBitLength(n: bigint): bigint {
 
 export interface GrhPrimeVerification {
   n: string;
-  verdict: 'composite' | 'conditional_prime' | 'inconclusive';
+  verdict: 'composite' | 'prime' | 'conditional_prime' | 'inconclusive';
   assurance: 'unconditional' | 'conditional_grh' | 'not_verified';
   assumption: 'none' | 'GRH_for_Dirichlet_L_functions';
   method: string;
@@ -75,13 +75,13 @@ export function verifyPrimeUnderGrh(value: string, maxBaseChecks = 100_000): Grh
   });
 
   if (n < 2n) return baseResult('composite', 'unconditional', 'none', 0n, 0n, 0, 'Values below 2 are not prime.');
-  if (n === 2n) return baseResult('conditional_prime', 'conditional_grh', 'GRH_for_Dirichlet_L_functions', 0n, 0n, 0, '2 is prime by direct exact check; no GRH assumption is needed.');
+  if (n === 2n) return baseResult('prime', 'conditional_grh', 'GRH_for_Dirichlet_L_functions', 0n, 0n, 0, '2 is prime by direct exact check; no GRH assumption is needed.');
   if ((n & 1n) === 0n) return baseResult('composite', 'unconditional_witness', 'none', 0n, 0n, 0, 'An even integer greater than 2 is composite.');
 
   const small = verifyPrimeDecimal(value);
   if (small.assurance === 'deterministic_u64') {
     return baseResult(
-      small.verdict === 'prime' ? 'conditional_prime' : 'composite',
+      small.verdict === 'prime' ? 'prime' : 'composite',
       small.verdict === 'prime' ? 'unconditional_witness' : 'unconditional_witness',
       'none', 0n, 0n, 0,
       'Handled by the separate proven deterministic 64-bit path; no GRH assumption is used.',
@@ -115,7 +115,7 @@ export function verifyPrimeUnderGrh(value: string, maxBaseChecks = 100_000): Grh
 
   const exhaustive = effectiveBound === n - 2n;
   return baseResult(
-    exhaustive ? 'conditional_prime' : 'conditional_prime',
+    exhaustive ? 'prime' : 'conditional_prime',
     exhaustive ? 'unconditional_witness' : 'conditional_grh',
     exhaustive ? 'none' : 'GRH_for_Dirichlet_L_functions',
     theoreticalBound, effectiveBound, checked,
