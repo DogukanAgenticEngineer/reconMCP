@@ -78,8 +78,8 @@ export function verifyPrimeUnderGrh(value: string, maxBaseChecks = 100_000): Grh
   if (n === 2n) return baseResult('prime', 'unconditional', 'none', 0n, 0n, 0, '2 is prime by direct exact check; no GRH assumption is needed.');
   if ((n & 1n) === 0n) return baseResult('composite', 'unconditional', 'none', 0n, 0n, 0, 'An even integer greater than 2 is composite.');
 
-  const small = verifyPrimeDecimal(value);
-  if (small.assurance === 'deterministic_u64') {
+  if (n < (1n << 64n)) {
+    const small = verifyPrimeDecimal(value);
     return baseResult(
       small.verdict === 'prime' ? 'prime' : 'composite',
       'unconditional',
