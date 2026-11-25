@@ -393,7 +393,7 @@ export function createMcpServer(): McpServer {
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
   }, async ({ n, rounds }) => {
     const result = verifyPrimeDecimal(n, rounds ?? 32);
-    const markdown = '# Prime verification\\n\\nVerdict: ' + result.verdict + '\\nAssurance: ' + result.assurance + '\\nMethod: ' + result.method + '\\nRounds: ' + result.rounds + '\\n\\n' + result.caveat;
+    const markdown = '# Prime verification\n\nVerdict: ' + result.verdict + '\nAssurance: ' + result.assurance + '\nMethod: ' + result.method + '\nRounds: ' + result.rounds + '\n\n' + result.caveat;
     return response(markdown, { schemaVersion: 'reconcile.primality.v1', ...result });
   });
 
@@ -407,7 +407,7 @@ export function createMcpServer(): McpServer {
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
   }, async ({ bits, rounds }) => {
     const result = generateProbablePrime(bits, rounds ?? 32);
-    const markdown = '# Probable-prime candidate generated\\n\\nBit length: ' + result.bits + '\\nCandidates tested: ' + result.candidatesTested + '\\nMiller-Rabin rounds: ' + result.rounds + '\\n\\n' + result.caveat;
+    const markdown = '# Probable-prime candidate generated\n\nBit length: ' + result.bits + '\nCandidates tested: ' + result.candidatesTested + '\nMiller-Rabin rounds: ' + result.rounds + '\n\n' + result.caveat;
     return response(markdown, { schemaVersion: 'reconcile.primality.v1', ...result });
   });
 
@@ -422,13 +422,13 @@ export function createMcpServer(): McpServer {
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
   }, async ({ n, maxBaseChecks }) => {
     const result = verifyPrimeUnderGrh(n, maxBaseChecks ?? 100_000);
-    const markdown = '# GRH-conditional primality scan\\n\\nVerdict: ' + result.verdict
-      + '\\nAssurance: ' + result.assurance
-      + '\\nAssumption: ' + result.assumption
-      + '\\nBach base bound: ' + result.theoreticalBaseBound
-      + '\\nScanned through: ' + result.effectiveBaseBound
-      + '\\nBases checked: ' + result.basesChecked
-      + '\\n\\n' + result.caveat;
+    const markdown = '# GRH-conditional primality scan\n\nVerdict: ' + result.verdict
+      + '\nAssurance: ' + result.assurance
+      + '\nAssumption: ' + result.assumption
+      + '\nBach base bound: ' + result.theoreticalBaseBound
+      + '\nScanned through: ' + result.effectiveBaseBound
+      + '\nBases checked: ' + result.basesChecked
+      + '\n\n' + result.caveat;
     return response(markdown, { schemaVersion: 'reconcile.primality.grh.v1', ...result });
   });
 
@@ -441,11 +441,11 @@ export function createMcpServer(): McpServer {
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
   }, async ({ n }) => {
     const result = generateLeanPrimeCertificateSource(n);
-    const markdown = '# Lean 4 proof script generated\\n\\nVerification status: ' + result.verificationStatus
-      + '\\nDependency: ' + result.dependency
-      + '\\n\\n' + result.instructions
-      + '\\n\\n' + result.caveat
-      + '\\n\\n```lean\\n' + result.source + '```';
+    const markdown = '# Lean 4 proof script generated\n\nVerification status: ' + result.verificationStatus
+      + '\nDependency: ' + result.dependency
+      + '\n\n' + result.instructions
+      + '\n\n' + result.caveat
+      + '\n\n```lean\n' + result.source + '```';
     return response(markdown, { schemaVersion: 'reconcile.primality.lean.v1', ...result });
   });
 
