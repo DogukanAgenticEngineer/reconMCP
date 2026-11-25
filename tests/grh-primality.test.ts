@@ -4,7 +4,7 @@ import { generateLeanPrimeCertificateSource } from '../src/crypto/lean-certifica
 
 describe('GRH-conditional primality verification', () => {
   it('labels a prime result as conditional on GRH', () => {
-    const result = verifyPrimeUnderGrh('101');
+    const result = verifyPrimeUnderGrh('18446744073709551629');
     expect(result.verdict).toBe('conditional_prime');
     expect(result.assurance).toBe('conditional_grh');
     expect(result.assumption).toBe('GRH_for_Dirichlet_L_functions');
