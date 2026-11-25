@@ -21,7 +21,16 @@ Reconcile MCP, iki CSV/Excel (XLSX), salt okunur PostgreSQL veya REST kaynağın
 - Bağlantı penceresi MCP sonucunun biçimini `Outcome → Metrics → Differences → Structured data` akışıyla açıklar; Claude/ChatGPT'nin son sunumu yine MCP istemcisinin özelliklerine bağlıdır.
 - Kobalte (Radix ve Base UI primitives), TanStack Table, SolidJS 2, Vite, Tailwind 3, TypeScript strict, Zod, Vitest ve ESLint.
 
-## Kriptografik asal sayı araçları\n\n`verify_prime` ondalık tamsayı girdisini denetler. `n < 2^64` için kanıtlanmış yedi tabanlı deterministik Miller–Rabin kümesini kullanır; daha büyük sayılarda CSPRNG tabanlı rastgele Miller–Rabin turları çalıştırır ve sonucu yalnızca `probable_prime` olarak raporlar. `generate_probable_prime`, 128–4096 bit aralığında CSPRNG ile aday üretir ve varsayılan 32 turla tarar. Bu araçlar RH/GRH varsayımını kullanmaz, Lean kanıtı veya sertifikalı asal üretmez ve üretim RSA anahtar üretiminin yerine geçmez.\n\nÖrnek doğrulama girdisi: `{"n":"18446744073709551557"}`. Büyük tamsayılarda `rounds` 1–64 arasıdır; üretimde 16–64 arası kabul edilir.\n\n## Sınırlar
+## Kriptografik asal sayı araçları
+
+- `verify_prime`: 64 bit altı için kanıtlanmış deterministik Miller–Rabin taban kümesi; daha büyük sayılarda CSPRNG tabanlı olasılıksal tarama.
+- `generate_probable_prime`: 128–4096 bit aralığında CSPRNG ile aday üretimi.
+- `verify_prime_grh`: Bach'ın GRH koşullu (2(\ln n)^2) taban sınırına kadar tüm tamsayı tabanları tarar. Pozitif sonuç yalnızca Dirichlet L-fonksiyonları için GRH varsayımı altında geçerlidir. İş bütçesi yetmezse `inconclusive` döner. Bulunan bileşik tanığı koşulsuzdur.
+- `generate_lean_prime_certificate`: Somut `Nat.Prime n` önermesi için Lean 4 + Mathlib ispat betiği üretir. Servis Lean çalıştırmaz; durum özellikle `generated_not_checked` olarak işaretlenir. Kullanıcı betiği `lake env lean PrimeCertificate.lean` ile kernel kontrolünden geçirmelidir.
+
+Bu araçlar henüz kompakt Pocklington/ECPP sertifikası, uzaktan Lean kernel servisi veya üretim RSA anahtar üretim hattı sağlamaz. GRH modu koşulsuz kanıt değildir. Büyük sayılar için Bach sınırı çok sayıda taban gerektirebilir; varsayılan 100.000 taban bütçesini aşan çağrılar sonuç uydurmak yerine `inconclusive` döndürür.
+
+## Sınırlar
 
 | Koruma | Sınır |
 |---|---:|
