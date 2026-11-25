@@ -1,5 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
+import { generateProbablePrime, verifyPrimeDecimal } from '../crypto/primality.js';
 import { assertResponseSize, compareDatasets, compareMultipleDatasets, COMPARISON_PREVIEW_LIMIT } from '../core/compare.js';
 import { resultToCsv } from '../core/report.js';
 import type { CompareOptions, ReconciliationResult } from '../core/types.js';
@@ -377,6 +378,35 @@ export function createMcpServer(): McpServer {
     } catch (error) {
       return failed(error, estimateCarbon(performance.now() - startedAt, 'completed', 'compare_multiple_datasets'));
     }
+  });
+
+
+  server.registerTool('verify_prime', {
+    title: 'Verify integer primality',
+    description: 'Deterministic Miller-Rabin below 2^64; randomized probable-prime screening above that bound. No RH/GRH proof claim.',
+    inputSchema: {
+      n: z.string().regex(/^(?:0|[1-9][0-9]{0,1233})$/),
+      rounds: z.number().int().min(1).max(64).optional(),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+  }, async ({ n, rounds }) => {
+    const result = verifyPrimeDecimal(n, rounds ?? 32);
+    const markdown = '# Prime verification\\n\\nVerdict: ' + result.verdict + '\\nAssurance: ' + result.assurance + '\\nMethod: ' + result.method + '\\nRounds: ' + result.rounds + '\\n\\n' + result.caveat;
+    return response(markdown, { schemaVersion: 'reconcile.primality.v1', ...result });
+  });
+
+  server.registerTool('generate_probable_prime', {
+    title: 'Generate probable prime candidate',
+    description: 'Generate a CSPRNG-backed odd probable-prime candidate. Not a certified RSA key-generation implementation.',
+    inputSchema: {
+      bits: z.number().int().min(128).max(4096),
+      rounds: z.number().int().min(16).max(64).optional(),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+  }, async ({ bits, rounds }) => {
+    const result = generateProbablePrime(bits, rounds ?? 32);
+    const markdown = '# Probable-prime candidate generated\\n\\nBit length: ' + result.bits + '\\nCandidates tested: ' + result.candidatesTested + '\\nMiller-Rabin rounds: ' + result.rounds + '\\n\\n' + result.caveat;
+    return response(markdown, { schemaVersion: 'reconcile.primality.v1', ...result });
   });
 
   return server;
