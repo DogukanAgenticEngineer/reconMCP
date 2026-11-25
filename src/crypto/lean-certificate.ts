@@ -23,7 +23,7 @@ export function generateLeanPrimeCertificateSource(value: string): LeanCertifica
     'theorem recon_prime_certificate : Nat.Prime ' + n.toString() + ' := by',
     '  norm_num',
     '',
-  ].join('\\n');
+  ].join('\n');
   return {
     n: n.toString(),
     language: 'lean4',
