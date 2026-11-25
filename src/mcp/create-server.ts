@@ -35,7 +35,7 @@ External connections are subject to deployment network policy. Do not place cred
 | \`detect_duplicates\` | Find duplicated keys in both sources |
 | \`detect_value_mismatches\` | Show deterministic mapped-value differences |
 | \`generate_report\` | Return structured findings, Markdown and complete CSV text |
-| estimate_operation_carbon | Model a planned call from expected server execution time |
+| estimate_operation_carbon | Model a planned call from expected server execution time |\n| `verify_prime` | Verify an integer; deterministic below 2^64, probable-prime screening above |\n| `generate_probable_prime` | Generate a CSPRNG-backed probable-prime candidate (128–4096 bits) |
 
 ## Matching
 
@@ -61,7 +61,7 @@ The machine-readable structuredContent object uses the schema reconcile.result.v
 
 Tool results include a client-readable Markdown report and machine-readable structured content. Client rendering varies; the structured fields are the canonical data. Full CSV output is available from \`generate_report\` when it fits within the 2 MB response limit. No result is silently truncated to fit that limit.
 
-## Carbon estimate
+## Cryptographic primality\n\nThe `verify_prime` tool uses a proven deterministic Miller–Rabin base set only for integers below 2^64. Larger inputs are screened with cryptographically random bases and are reported as `probable_prime`, not proven prime. `generate_probable_prime` produces candidates using the operating-system CSPRNG and Miller–Rabin screening. These tools do not assume RH/GRH, do not produce Lean proof certificates, and are not a standards-compliant RSA key-generation pipeline.\n\n## Carbon estimate
 
 Completed comparison calls estimate server-side electricity as elapsed wall time × configured average power, then multiply by the configured grid factor. Defaults are an illustrative 50 W model assumption and 445 g CO2/kWh, the IEA 2024 global electricity-generation intensity. Set RECONCILE_CARBON_ESTIMATED_POWER_W and RECONCILE_CARBON_GRID_INTENSITY_G_CO2_KWH for local/provider assumptions. These estimates are not metered and exclude external sources, network/client energy, data-center overhead/PUE and embodied emissions. estimate_operation_carbon applies the same model to a caller-supplied expected duration (0–15 seconds).
 `;
