@@ -2,7 +2,7 @@
 
 ## Product identity
 
-Reconcile MCP is an industry-neutral, privacy-conscious data reconciliation workspace and MCP server. The interface should communicate dependable comparison, explicit user control and inspectable evidence. It is not a restaurant finance product, accounting replacement or industry-specific dashboard.
+Reconcile MCP is an industry-neutral, privacy-conscious data reconciliation workspace and MCP server. The interface should communicate dependable comparison, explicit user control and inspectable evidence. It is not an accounting replacement or a vertical-specific dashboard.
 
 ## Design principles
 
