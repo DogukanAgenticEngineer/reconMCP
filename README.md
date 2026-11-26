@@ -9,11 +9,9 @@ Reconcile MCP, iki CSV/Excel (XLSX), salt okunur PostgreSQL veya REST kaynağın
 
 > “Sıfır saklama” bu kodun uygulama katmanında kalıcı veri tutmaması anlamındadır. Vercel/GitHub gibi altyapı sağlayıcılarının trafik ve işlev loglarını ya da retention sürelerini bu uygulama denetlemez. Hassas veri kullanmadan önce [PRIVACY.md](PRIVACY.md) ve [DATA_RETENTION.md](DATA_RETENTION.md)'yi okuyun.
 
-## MarginPilot (restaurant finance layer)
+## Extensible reconciliation workflows
 
-MarginPilot is the first vertical workflow planned on top of Reconcile MCP. It reuses the existing deterministic reconciliation engine rather than introducing a second parser or matching system. The initial scope is independent cafes/restaurants: POS sales, delivery-platform settlement statements and bank deposits. Restaurant-specific rules will calculate expected payouts, reconcile bank credits and flag POS/platform coverage variances with row-level evidence and explicit confidence labels. Existing generic MCP tools remain backward-compatible; the additive design and staged implementation are documented in [docs/MARGINPILOT_INTEGRATION.md](docs/MARGINPILOT_INTEGRATION.md).
-
-**Important:** this pull request adds the product/architecture specification only, not the restaurant analysis runtime. The current public MCP endpoint has no application-level account authentication or distributed rate limiter. Do not upload confidential production financial data until authentication, tenant isolation, rate limiting and provider retention have been addressed.
+Reconcile MCP is designed as an industry-neutral reconciliation engine. Domain-specific workflows can be added as optional layers when their data semantics, validation rules and evidence requirements are independently specified and tested. Such extensions must not narrow or replace the generic reconciliation core or change the behavior of existing MCP tools.
 
 ## Özellikler
 
