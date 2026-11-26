@@ -1,87 +1,52 @@
-# MarginPilot UI system
+# Reconcile MCP UI system
 
-## Product direction
+## Product identity
 
-A calm, evidence-first finance workspace for independent cafes and restaurants. It should feel like a trustworthy financial operations product, not a restaurant POS, bookkeeping replacement, or marketing landing page.
+Reconcile MCP is an industry-neutral, privacy-conscious data reconciliation workspace and MCP server. The interface should communicate dependable comparison, explicit user control and inspectable evidence. It is not a restaurant finance product, accounting replacement or industry-specific dashboard.
 
-Learn interaction principles from Stripe Dashboard (financial tables and precise drill-downs), Linear (restrained chrome and compact navigation), and Vercel (consistent geometry and predictable settings). Do not copy proprietary assets or layouts pixel-for-pixel.
+## Design principles
 
-## Brand palette
-
-Neutral-led 60/30/10 balance. Most of the interface remains neutral; brand green is reserved for primary actions, focus and verified states. Amber means review-needed or uncertain. Red is reserved for confirmed negative/critical states. Never use color alone to communicate status.
-
-Light theme:
-- Canvas #F5F7F4; surface #FFFFFF; soft surface #F8FAF8
-- Primary text #17231E; secondary #68766F; border #E3E9E4
-- Brand green #176B52; soft green #E7F3ED
-- Review amber #A96713 / #FFF4DF
-- Critical red #B83E3E / #FFF0EF
-- Verified green #16724F / #E8F5ED
-
-Dark theme is independently tuned, not inverted:
-- Canvas #101713; surface #17211B; raised surface #202D25
-- Text #EDF5EF; muted #A2B1A7; border #2B3B31
-- Brand #75C7A3; amber #E9B65E; red #FF8981
-
-Status rules: verified/match=green; candidate/needs review=amber; confirmed mismatch/critical=red; not evaluated=neutral. A plausible bank match must remain amber until a human confirms it.
-
-## Typography
-
-Use installed Geist Variable with Inter/system fallbacks. Page heading 38–66px; section heading 16px semibold; body 12–14px with 1.5–1.65 line-height; metadata/table labels 10–11px. Use tabular numerals for financial columns and right-align numeric values. Use monospace only for IDs/references/technical payloads when needed. Avoid decorative display fonts.
-
-## Layout and density
-
-- 4px spacing base; preferred steps 4, 8, 12, 16, 24, 32, 48.
-- Max content width 1440px; tables can use full available width.
-- 8–15px radii, low-elevation shadows, quiet 1px borders.
-- Show 3–5 headline metrics only when they are real and calculated.
-- Tables are the source of truth; charts summarize and never replace row-level evidence.
-- Avoid decorative gauges, excessive pills, glass effects and borders around every nested element.
-- Responsive: stack at tablet widths, preserve horizontal table scrolling, and keep primary action easy to reach on mobile.
+- Keep the core workflow useful for datasets from many domains.
+- Explain accepted formats, size limits, detected columns and row counts before comparison.
+- Make source selection, field mapping and comparison settings explicit and editable.
+- Keep exact values and source references inspectable; distinguish matches, mismatches, missing records, duplicates and schema differences.
+- Avoid unsupported claims about savings, fraud, compliance or financial loss.
+- Treat MCP as an integration surface for compatible clients, not as a replacement for the user-facing workspace.
 
 ## Information architecture
 
-1. Overview: selected venue and period, source coverage, last completed analysis only if actually persisted, and one next action.
-2. Sources: upload POS, platform settlement and bank exports; show format, size, row count, period and currency.
-3. Mapping: explicit source roles and user-confirmed financial mappings; show unknown fields.
-4. Analysis: clear progress stages; never imply a financial check ran if it did not.
-5. Findings: evidence-first list with amount/currency, severity, confidence, period, affected sources and next step.
-6. Finding detail: formula, source row references, inputs, tolerance and side-by-side evidence.
-7. Export: user-triggered report with data-sensitivity warning.
+1. Sources: upload two or more supported datasets; show file format, size, row count and detected columns.
+2. Mapping: select stable keys and comparable fields; show suggestions as editable choices.
+3. Comparison: run deterministic reconciliation only after required inputs are valid.
+4. Evidence: inspect comparison groups, differences and summary metrics; export the complete report.
+5. Integration: expose the Streamable HTTP MCP endpoint and available tools with clear setup guidance.
 
-## Behavioral design
+## Visual system
 
-Target behavior: upload exports, confirm ambiguous mappings, inspect an evidence-backed finding and choose the next action.
+- Neutral surfaces dominate; use the existing Reconcile MCP brand identity.
+- Use restrained green for primary actions and verified states, amber for review-needed states, and red for confirmed mismatches or critical errors.
+- Pair every color-coded state with text; never rely on color alone.
+- Use tabular numerals for values, consistent spacing, low-elevation surfaces and responsive tables.
+- Keep the existing light/dark themes and ensure readable contrast in both.
 
-Reduce friction without hiding consequential decisions:
-- Give source-specific upload guidance and accepted formats.
-- Suggest mappings but require confirmation for ambiguous financial semantics.
-- Preview row count, period, currency and unmapped fields before analysis.
-- Explain calculations in plain language and show exact source rows.
-- Allow users to confirm candidate matches, mark findings not relevant and revisit dismissed items.
-- No fake urgency, fabricated savings, fear-based warnings or dark patterns.
-- Empty states explain the next useful action; errors explain what failed and how to recover.
+## Motion and feedback
+
+- Use subtle, short entry transitions without layout shifts.
+- Show file-reading feedback only while the real inspect request is pending.
+- Update workflow completion from actual application state, never from timers.
+- Use indeterminate feedback while comparison requests are active; do not invent percentages.
+- Keep result and dialog transitions restrained and interruptible.
+- Respect `prefers-reduced-motion` and collapse nonessential motion.
 
 ## Accessibility and trust
 
-- Target WCAG 2.2 AA contrast for text and controls; visible keyboard focus.
-- Pair status colors with labels/icons; do not rely on color alone.
-- Respect reduced-motion preferences.
+- Target WCAG 2.2 AA contrast for text and controls; retain visible keyboard focus.
 - Use semantic headings, labels, button names, table headers and live error announcements.
 - Support keyboard operation and screen-reader descriptions for dropzones and switches.
-- Never truncate a financial value without an accessible way to inspect it.
-- Never label an unverified variance as fraud, theft or confirmed loss.
+- Never truncate a value without an accessible way to inspect it.
+- Make errors actionable and preserve user context where possible.
+- Do not introduce persistence, analytics or additional data collection without privacy review.
 
 ## Current implementation boundary
 
-The current app is a MarginPilot-branded preview over the existing generic CSV/XLSX comparison endpoint. It does not yet run restaurant-specific settlement arithmetic, platform commission checks, bank payout matching or POS-to-platform coverage rules. The UI must not imply that those domain checks have run until the additive MarginPilot workflow is implemented and tested.
-
-## Review checklist
-
-- [ ] Source roles and field mappings are explicit and user-confirmed.
-- [ ] All displayed amounts are sourced from real analysis output.
-- [ ] Candidate and confirmed findings are visually distinct.
-- [ ] Numeric columns align and remain readable at high row counts.
-- [ ] Light/dark themes meet contrast requirements.
-- [ ] Keyboard, focus, mobile, reduced-motion and empty/error states are tested.
-- [ ] No persistence or analytics is introduced without privacy review.
+The UI wraps the existing generic CSV/XLSX reconciliation endpoint. It must describe only the comparison and evidence actually returned by that endpoint. Future domain-specific workflows require separate schemas, tested rules and source-backed evidence before being represented as available product capabilities.
